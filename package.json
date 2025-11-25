@@ -5,19 +5,28 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "debug": "node scripts/debug.js",
+    "monitor": "node scripts/browser-monitor.js",
+    "monitor:headed": "node scripts/browser-monitor.js --headed"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.33.1",
+    "@prisma/client": "^6.16.2",
+    "@vercel/postgres": "^0.10.0",
+    "chalk": "^5.6.0",
+    "next": "15.5.2",
+    "playwright": "^1.55.0",
+    "prisma": "^6.16.2",
     "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "next": "15.5.2"
+    "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.17",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
