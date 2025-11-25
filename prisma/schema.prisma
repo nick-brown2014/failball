@@ -7,41 +7,582 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ============================================
+// NextAuth.js Models for Secure Authentication
+// ============================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// Core User Model (Extended for NextAuth)
+// ============================================
+
 model User {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  email     String   @unique
-  name      String?
-  teams     Team[]
-  leagues   League[]
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+
+  // Failball relations
+  memberships     LeagueMembership[]
+  teams           Team[]
+  createdLeagues  League[]           @relation("LeagueCreator")
+  createdInvites  LeagueInvite[]
+  trades          Trade[]            @relation("TradeProposer")
+
+  @@map("users")
+}
+
+// ============================================
+// League & Membership
+// ============================================
+
+enum MemberRole {
+  COMMISSIONER
+  MEMBER
 }
 
 model League {
   id          String   @id @default(cuid())
-  userId      Int
   name        String
   season      Int
-  teams       Team[]
   maxTeams    Int      @default(12)
   isActive    Boolean  @default(true)
+  isPublic    Boolean  @default(false)
+  createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id])
+
+  // Relations
+  createdBy   User               @relation("LeagueCreator", fields: [createdById], references: [id])
+  settings    LeagueSettings?
+  memberships LeagueMembership[]
+  teams       Team[]
+  drafts      Draft[]
+  matchups    Matchup[]
+  trades      Trade[]
+  waiverClaims WaiverClaim[]
+  transactions Transaction[]
+  invites     LeagueInvite[]
+  seasonRecords SeasonRecord[]
 
   @@map("leagues")
 }
 
+model LeagueMembership {
+  id        String     @id @default(cuid())
+  userId    String
+  leagueId  String
+  role      MemberRole @default(MEMBER)
+  joinedAt  DateTime   @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leagueId])
+  @@map("league_memberships")
+}
+
+model LeagueInvite {
+  id          String    @id @default(cuid())
+  leagueId    String
+  code        String    @unique
+  createdById String
+  expiresAt   DateTime?
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  league    League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  createdBy User   @relation(fields: [createdById], references: [id])
+
+  @@map("league_invites")
+}
+
+// ============================================
+// League Settings (Customizable Scoring)
+// ============================================
+
+model LeagueSettings {
+  id       String @id @default(cuid())
+  leagueId String @unique
+
+  // Roster Configuration
+  rosterSize        Int @default(15)
+  benchSize         Int @default(6)
+  qbSlots           Int @default(1)
+  rbSlots           Int @default(2)
+  wrSlots           Int @default(2)
+  teSlots           Int @default(1)
+  flexSlots         Int @default(1)
+  stSlots           Int @default(1)
+  defSlots          Int @default(1)
+  irSlots           Int @default(1)
+
+  // Season Configuration
+  regularSeasonWeeks Int @default(14)
+  playoffTeams       Int @default(6)
+  playoffStartWeek   Int @default(15)
+  tradeDeadlineWeek  Int @default(11)
+
+  // Waiver Configuration
+  waiverProcessDay   Int @default(3)
+  waiverType         WaiverType @default(ROLLING)
+
+  // ============================================
+  // QB Scoring
+  // ============================================
+  qbIncompletion     Decimal @default(0.5)  @db.Decimal(4, 2)
+  qbInterception     Decimal @default(6)    @db.Decimal(4, 2)
+  qbSack             Decimal @default(2)    @db.Decimal(4, 2)
+  qbScramble         Decimal @default(-1)   @db.Decimal(4, 2)
+  qbFumble           Decimal @default(6)    @db.Decimal(4, 2)
+  qbTouchdown        Decimal @default(-2)   @db.Decimal(4, 2)
+
+  // ============================================
+  // RB Scoring
+  // ============================================
+  rbNegativeRun      Decimal @default(2)    @db.Decimal(4, 2)
+  rbNeutralRun       Decimal @default(1)    @db.Decimal(4, 2)
+  rbSuccessfulRun    Decimal @default(0)    @db.Decimal(4, 2)
+  rbExplosiveRun     Decimal @default(-1)   @db.Decimal(4, 2)
+  rbFumble           Decimal @default(6)    @db.Decimal(4, 2)
+  rbTouchdown        Decimal @default(-2)   @db.Decimal(4, 2)
+
+  // ============================================
+  // Pass Catcher (WR/TE) Scoring
+  // ============================================
+  pcIncompleteTarget Decimal @default(1)    @db.Decimal(4, 2)
+  pcDrop             Decimal @default(6)    @db.Decimal(4, 2)
+  pcRouteNotTargeted Decimal @default(0.25) @db.Decimal(4, 2)
+  pcNegativeCatch    Decimal @default(2)    @db.Decimal(4, 2)
+  pcNeutralCatch     Decimal @default(1)    @db.Decimal(4, 2)
+  pcSuccessfulCatch  Decimal @default(0)    @db.Decimal(4, 2)
+  pcExplosiveCatch   Decimal @default(-1)   @db.Decimal(4, 2)
+  pcFumble           Decimal @default(6)    @db.Decimal(4, 2)
+  pcTouchdown        Decimal @default(-2)   @db.Decimal(4, 2)
+
+  // ============================================
+  // Defense Scoring
+  // ============================================
+  defTouchdownAllowed    Decimal @default(4)    @db.Decimal(4, 2)
+  defFieldGoalAllowed    Decimal @default(1)    @db.Decimal(4, 2)
+  defYardsAllowed0to100  Decimal @default(-4)   @db.Decimal(4, 2)
+  defYardsAllowed100to200 Decimal @default(-2)  @db.Decimal(4, 2)
+  defYardsAllowed200to300 Decimal @default(0)   @db.Decimal(4, 2)
+  defYardsAllowed300to400 Decimal @default(2)   @db.Decimal(4, 2)
+  defYardsAllowed400to500 Decimal @default(4)   @db.Decimal(4, 2)
+  defYardsAllowed500plus  Decimal @default(6)   @db.Decimal(4, 2)
+  defSack                Decimal @default(-1)   @db.Decimal(4, 2)
+  defSafety              Decimal @default(-2)   @db.Decimal(4, 2)
+  defInterception        Decimal @default(-2)   @db.Decimal(4, 2)
+  defFumbleRecovery      Decimal @default(-2)   @db.Decimal(4, 2)
+  defPickSix             Decimal @default(-4)   @db.Decimal(4, 2)
+  defFumbleReturnTd      Decimal @default(-4)   @db.Decimal(4, 2)
+
+  // ============================================
+  // Special Teams Scoring
+  // ============================================
+  stMissedExtraPoint     Decimal @default(5)    @db.Decimal(4, 2)
+  stMissedFieldGoal      Decimal @default(3)    @db.Decimal(4, 2)
+  stMadeFieldGoalUnder50 Decimal @default(-1)   @db.Decimal(4, 2)
+  stMadeFieldGoalOver50  Decimal @default(-2)   @db.Decimal(4, 2)
+  stKickoffReturnTd      Decimal @default(-4)   @db.Decimal(4, 2)
+  stKickoffMuffed        Decimal @default(4)    @db.Decimal(4, 2)
+  stKickoffStuffed       Decimal @default(1)    @db.Decimal(4, 2)
+  stPuntReturnTd         Decimal @default(-4)   @db.Decimal(4, 2)
+  stPuntMuffed           Decimal @default(4)    @db.Decimal(4, 2)
+  stPuntStuffed          Decimal @default(1)    @db.Decimal(4, 2)
+  stPuntTouchback        Decimal @default(1)    @db.Decimal(4, 2)
+  stPuntBlocked          Decimal @default(4)    @db.Decimal(4, 2)
+  stOnsideKickFail       Decimal @default(6)    @db.Decimal(4, 2)
+  stPenaltyExtendDrive   Decimal @default(3)    @db.Decimal(4, 2)
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@map("league_settings")
+}
+
+enum WaiverType {
+  ROLLING
+  FAAB
+  RESET_WEEKLY
+}
+
+// ============================================
+// Teams & Rosters
+// ============================================
+
 model Team {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  leagueId  String
+  wins      Int      @default(0)
+  losses    Int      @default(0)
+  ties      Int      @default(0)
+  pointsFor Decimal  @default(0) @db.Decimal(10, 2)
+  pointsAgainst Decimal @default(0) @db.Decimal(10, 2)
+  waiverPriority Int @default(1)
+  faabBudget Decimal @default(100) @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  roster        RosterSlot[]
+  draftPicks    DraftPick[]
+  draftOrder    DraftOrder[]
+  homeMatchups  Matchup[]      @relation("HomeTeam")
+  awayMatchups  Matchup[]      @relation("AwayTeam")
+  proposedTrades Trade[]       @relation("ProposingTeam")
+  receivedTrades Trade[]       @relation("ReceivingTeam")
+  tradePlayers  TradePlayer[]
+  waiverClaims  WaiverClaim[]
+  transactions  Transaction[]
+  seasonRecords SeasonRecord[]
+
+  @@unique([userId, leagueId])
+  @@map("teams")
+}
+
+enum Position {
+  QB
+  RB
+  WR
+  TE
+  ST
+  DEF
+  FLEX
+}
+
+enum SlotType {
+  STARTER
+  BENCH
+  IR
+}
+
+model RosterSlot {
+  id               String    @id @default(cuid())
+  teamId           String
+  externalPlayerId String
+  position         Position
+  slotType         SlotType  @default(STARTER)
+  acquiredAt       DateTime  @default(now())
+  acquiredVia      AcquisitionType
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, externalPlayerId])
+  @@map("roster_slots")
+}
+
+enum AcquisitionType {
+  DRAFT
+  TRADE
+  WAIVER
+  FREE_AGENT
+}
+
+// ============================================
+// Draft System
+// ============================================
+
+enum DraftStatus {
+  SCHEDULED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+}
+
+enum DraftType {
+  SNAKE
+  LINEAR
+}
+
+model Draft {
+  id             String      @id @default(cuid())
+  leagueId       String
+  status         DraftStatus @default(SCHEDULED)
+  draftType      DraftType   @default(SNAKE)
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  currentRound   Int         @default(1)
+  currentPick    Int         @default(1)
+  secondsPerPick Int         @default(90)
+  totalRounds    Int         @default(15)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  league     League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  draftOrder DraftOrder[]
+  picks      DraftPick[]
+
+  @@map("drafts")
+}
+
+model DraftOrder {
+  id       String @id @default(cuid())
+  draftId  String
+  teamId   String
+  position Int
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, position])
+  @@unique([draftId, teamId])
+  @@map("draft_orders")
+}
+
+model DraftPick {
+  id               String   @id @default(cuid())
+  draftId          String
+  teamId           String
+  round            Int
+  pickNumber       Int
+  externalPlayerId String
+  pickedAt         DateTime @default(now())
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, pickNumber])
+  @@unique([draftId, externalPlayerId])
+  @@map("draft_picks")
+}
+
+// ============================================
+// Matchups (Weekly Head-to-Head)
+// ============================================
+
+model Matchup {
   id           String   @id @default(cuid())
-  name         String
-  userId       Int
   leagueId     String
-  wins         Int      @default(0)
-  losses       Int      @default(0)
-  user         User     @relation(fields: [userId], references: [id])
-  league       League   @relation(fields: [leagueId], references: [id])
+  week         Int
+  season       Int
+  homeTeamId   String
+  awayTeamId   String
+  homeScore    Decimal? @db.Decimal(10, 2)
+  awayScore    Decimal? @db.Decimal(10, 2)
+  isPlayoff    Boolean  @default(false)
+  playoffRound PlayoffRound?
+  isComplete   Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@map("teams")
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  homeTeam Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
+
+  @@unique([leagueId, week, homeTeamId])
+  @@unique([leagueId, week, awayTeamId])
+  @@map("matchups")
+}
+
+enum PlayoffRound {
+  WILDCARD
+  SEMIFINAL
+  CHAMPIONSHIP
+  THIRD_PLACE
+}
+
+// ============================================
+// Trades
+// ============================================
+
+enum TradeStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  VETOED
+  EXPIRED
+  COMPLETED
+}
+
+model Trade {
+  id              String      @id @default(cuid())
+  leagueId        String
+  proposingTeamId String
+  receivingTeamId String
+  proposedById    String
+  status          TradeStatus @default(PENDING)
+  proposedAt      DateTime    @default(now())
+  expiresAt       DateTime
+  respondedAt     DateTime?
+  processedAt     DateTime?
+  vetoCount       Int         @default(0)
+  vetoThreshold   Int         @default(4)
+  notes           String?     @db.Text
+
+  league        League        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  proposingTeam Team          @relation("ProposingTeam", fields: [proposingTeamId], references: [id])
+  receivingTeam Team          @relation("ReceivingTeam", fields: [receivingTeamId], references: [id])
+  proposedBy    User          @relation("TradeProposer", fields: [proposedById], references: [id])
+  players       TradePlayer[]
+
+  @@map("trades")
+}
+
+model TradePlayer {
+  id               String @id @default(cuid())
+  tradeId          String
+  teamId           String
+  externalPlayerId String
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id])
+
+  @@map("trade_players")
+}
+
+// ============================================
+// Waivers & Free Agency
+// ============================================
+
+enum WaiverStatus {
+  PENDING
+  APPROVED
+  FAILED
+  CANCELLED
+}
+
+model WaiverClaim {
+  id               String       @id @default(cuid())
+  leagueId         String
+  teamId           String
+  externalPlayerId String
+  dropPlayerId     String?
+  priority         Int
+  faabBid          Decimal?     @db.Decimal(10, 2)
+  status           WaiverStatus @default(PENDING)
+  week             Int
+  createdAt        DateTime     @default(now())
+  processedAt      DateTime?
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("waiver_claims")
+}
+
+// ============================================
+// Transactions (Audit Log)
+// ============================================
+
+enum TransactionType {
+  DRAFT
+  TRADE
+  WAIVER
+  FREE_AGENT
+  DROP
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+model Transaction {
+  id               String            @id @default(cuid())
+  leagueId         String
+  teamId           String
+  type             TransactionType
+  status           TransactionStatus @default(COMPLETED)
+  externalPlayerId String
+  action           String
+  relatedTradeId   String?
+  relatedWaiverId  String?
+  week             Int
+  season           Int
+  processedAt      DateTime          @default(now())
+  notes            String?
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+// ============================================
+// Historical Records
+// ============================================
+
+enum PlayoffResult {
+  CHAMPION
+  RUNNER_UP
+  THIRD_PLACE
+  SEMIFINAL
+  QUARTERFINAL
+  MISSED_PLAYOFFS
+}
+
+model SeasonRecord {
+  id            String        @id @default(cuid())
+  teamId        String
+  leagueId      String
+  season        Int
+  finalRank     Int
+  wins          Int
+  losses        Int
+  ties          Int           @default(0)
+  pointsFor     Decimal       @db.Decimal(10, 2)
+  pointsAgainst Decimal       @db.Decimal(10, 2)
+  playoffResult PlayoffResult
+  createdAt     DateTime      @default(now())
+
+  team   Team   @relation(fields: [teamId], references: [id])
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, season])
+  @@map("season_records")
 }
