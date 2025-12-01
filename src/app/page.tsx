@@ -1,6 +1,7 @@
 import Navigation from "@/components/Navigation";
 import AuthForm from "@/components/AuthForm";
 
+// Dummy test change to verify Devin can create PRs
 export default function Home() {
   return (
     <div className="font-sans min-h-screen w-full max-w-screen">
