@@ -8,7 +8,8 @@
     "start": "next start",
     "debug": "node scripts/debug.js",
     "monitor": "node scripts/browser-monitor.js",
-    "monitor:headed": "node scripts/browser-monitor.js --headed"
+    "monitor:headed": "node scripts/browser-monitor.js --headed",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
