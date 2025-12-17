@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Navigation from "@/components/Navigation";
+import { getMockUserData, getLeagueStandings, getTeamOwnerName, type MockUserData, type MockTeam } from "@/lib/mockData";
 
 interface UserData {
   id: string;
@@ -35,6 +36,9 @@ export default function Dashboard() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [useMockData, setUseMockData] = useState(false);
+  const [mockUserData, setMockUserData] = useState<MockUserData | null>(null);
+  const [leagueStandings, setLeagueStandings] = useState<MockTeam[]>([]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -44,10 +48,16 @@ export default function Dashboard() {
           const data = await res.json();
           setUserData(data.user);
         } else {
-          setError("Failed to load user data");
+          // Fall back to mock data if API fails
+          setUseMockData(true);
+          setMockUserData(getMockUserData("user_1"));
+          setLeagueStandings(getLeagueStandings());
         }
       } catch {
-        setError("An error occurred");
+        // Fall back to mock data on error
+        setUseMockData(true);
+        setMockUserData(getMockUserData("user_1"));
+        setLeagueStandings(getLeagueStandings());
       } finally {
         setLoading(false);
       }
@@ -85,18 +95,31 @@ export default function Dashboard() {
     );
   }
 
+  // Determine which data source to use
+  const displayData = useMockData ? mockUserData : userData;
+  const displayName = useMockData 
+    ? mockUserData?.name 
+    : (session?.user?.name || session?.user?.email);
+
   return (
     <div className="font-sans min-h-screen w-full">
       <Navigation />
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
-          >
-            Sign Out
-          </button>
+          <div className="flex items-center gap-4">
+            {useMockData && (
+              <span className="px-3 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                Demo Mode
+              </span>
+            )}
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -106,25 +129,34 @@ export default function Dashboard() {
         )}
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Welcome, {session?.user?.name || session?.user?.email}!</h2>
+          <h2 className="text-xl font-semibold mb-4">Welcome, {displayName}!</h2>
           
-          {userData && (
+          {displayData && (
             <div className="space-y-2 text-gray-600 dark:text-gray-300">
-              <p><span className="font-medium">Email:</span> {userData.email}</p>
-              <p><span className="font-medium">Member since:</span> {new Date(userData.createdAt).toLocaleDateString()}</p>
+              <p><span className="font-medium">Email:</span> {displayData.email}</p>
+              <p><span className="font-medium">Member since:</span> {new Date(displayData.createdAt).toLocaleDateString()}</p>
             </div>
           )}
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Your Leagues</h2>
-            {userData?.memberships && userData.memberships.length > 0 ? (
+            {displayData?.memberships && displayData.memberships.length > 0 ? (
               <ul className="space-y-2">
-                {userData.memberships.map((membership) => (
+                {displayData.memberships.map((membership) => (
                   <li key={membership.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                    <span>{membership.league.name}</span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                    <div>
+                      <span className="font-medium">{membership.league.name}</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
+                        ({membership.league.season})
+                      </span>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      membership.role === "COMMISSIONER" 
+                        ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" 
+                        : "bg-gray-100 text-gray-600 dark:bg-gray-600 dark:text-gray-300"
+                    }`}>
                       {membership.role}
                     </span>
                   </li>
@@ -142,11 +174,11 @@ export default function Dashboard() {
 
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Your Teams</h2>
-            {userData?.teams && userData.teams.length > 0 ? (
+            {displayData?.teams && displayData.teams.length > 0 ? (
               <ul className="space-y-2">
-                {userData.teams.map((team) => (
+                {displayData.teams.map((team) => (
                   <li key={team.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                    <span>{team.name}</span>
+                    <span className="font-medium">{team.name}</span>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       {team.league.name}
                     </span>
@@ -160,6 +192,64 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {useMockData && leagueStandings.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-semibold mb-4">League Standings - Fumble Factory League</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b dark:border-gray-700">
+                    <th className="text-left py-3 px-2">Rank</th>
+                    <th className="text-left py-3 px-2">Team</th>
+                    <th className="text-left py-3 px-2">Owner</th>
+                    <th className="text-center py-3 px-2">W</th>
+                    <th className="text-center py-3 px-2">L</th>
+                    <th className="text-center py-3 px-2">T</th>
+                    <th className="text-right py-3 px-2">PF</th>
+                    <th className="text-right py-3 px-2">PA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leagueStandings.map((team, index) => (
+                    <tr 
+                      key={team.id} 
+                      className={`border-b dark:border-gray-700 ${
+                        team.userId === "user_1" ? "bg-orange-50 dark:bg-orange-900/20" : ""
+                      }`}
+                    >
+                      <td className="py-3 px-2 font-medium">{index + 1}</td>
+                      <td className="py-3 px-2">
+                        <span className="font-medium">{team.name}</span>
+                        {team.userId === "user_1" && (
+                          <span className="ml-2 text-xs text-orange-600">(You)</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-2 text-gray-600 dark:text-gray-400">
+                        {getTeamOwnerName(team.id)}
+                      </td>
+                      <td className="py-3 px-2 text-center text-green-600 dark:text-green-400 font-medium">
+                        {team.wins}
+                      </td>
+                      <td className="py-3 px-2 text-center text-red-600 dark:text-red-400 font-medium">
+                        {team.losses}
+                      </td>
+                      <td className="py-3 px-2 text-center text-gray-500">
+                        {team.ties}
+                      </td>
+                      <td className="py-3 px-2 text-right">
+                        {team.pointsFor.toFixed(1)}
+                      </td>
+                      <td className="py-3 px-2 text-right text-gray-500">
+                        {team.pointsAgainst.toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
