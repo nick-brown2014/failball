@@ -48,9 +48,20 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Build the reset URL
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const resetUrl = `${appUrl}/auth/reset-password?token=${token}`;
+    // Build the reset URL using NEXTAUTH_URL (more reliable) or derive from request
+    // NEXTAUTH_URL is typically already configured for NextAuth.js authentication
+    // Fallback chain: NEXTAUTH_URL -> APP_URL -> request origin -> localhost
+    const origin = request.headers.get("origin") || request.headers.get("host");
+    const protocol = request.headers.get("x-forwarded-proto") || "https";
+    const derivedUrl = origin ? `${protocol}://${origin}` : null;
+    
+    const appUrl = process.env.NEXTAUTH_URL 
+      || process.env.APP_URL 
+      || derivedUrl 
+      || "http://localhost:3000";
+    
+    const resetUrl = new URL("/auth/reset-password", appUrl);
+    resetUrl.searchParams.set("token", token);
 
     // Send the email via Resend
     const resend = new Resend(process.env.RESEND_API_KEY);
