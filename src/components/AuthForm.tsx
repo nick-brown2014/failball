@@ -2,6 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -117,6 +118,17 @@ export default function AuthForm() {
               placeholder="••••••••"
             />
           </div>
+
+          {!isSignUp && (
+            <div className="flex justify-end">
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm font-medium text-orange-600 hover:text-orange-500"
+              >
+                Forgot your password?
+              </Link>
+            </div>
+          )}
 
           <button
             type="submit"
