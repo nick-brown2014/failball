@@ -1,8 +1,61 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
+
+interface ValidationErrors {
+  email?: string;
+  password?: string;
+  name?: string;
+}
+
+function validateEmail(email: string): string | undefined {
+  if (!email) {
+    return "Email is required";
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return "Please enter a valid email address";
+  }
+  return undefined;
+}
+
+function validatePassword(password: string, isSignUp: boolean): string | undefined {
+  if (!password) {
+    return "Password is required";
+  }
+  if (password.length < 8) {
+    return "Password must be at least 8 characters";
+  }
+  if (isSignUp) {
+    if (!/[A-Z]/.test(password)) {
+      return "Password must contain at least one uppercase letter";
+    }
+    if (!/[a-z]/.test(password)) {
+      return "Password must contain at least one lowercase letter";
+    }
+    if (!/[0-9]/.test(password)) {
+      return "Password must contain at least one number";
+    }
+  }
+  return undefined;
+}
+
+function validateName(name: string, isSignUp: boolean): string | undefined {
+  if (!isSignUp) {
+    return undefined;
+  }
+  if (name && name.length > 0) {
+    if (name.length < 2) {
+      return "Name must be at least 2 characters";
+    }
+    if (name.length > 50) {
+      return "Name must be less than 50 characters";
+    }
+  }
+  return undefined;
+}
 
 export default function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -10,20 +63,42 @@ export default function AuthForm() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<ValidationErrors>({});
   const [loading, setLoading] = useState(false);
+
+  const validateForm = useCallback((): boolean => {
+    const errors: ValidationErrors = {};
+
+    const emailError = validateEmail(email);
+    if (emailError) errors.email = emailError;
+
+    const passwordError = validatePassword(password, isSignUp);
+    if (passwordError) errors.password = passwordError;
+
+    const nameError = validateName(name, isSignUp);
+    if (nameError) errors.name = nameError;
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [email, password, name, isSignUp]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
+
+    if (!validateForm()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (isSignUp) {
-        // Register new user
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, name }),
+          body: JSON.stringify({ email: email.trim().toLowerCase(), password, name: name.trim() }),
         });
 
         if (!res.ok) {
@@ -31,16 +106,14 @@ export default function AuthForm() {
           throw new Error(data.error || "Registration failed");
         }
 
-        // Auto sign in after registration
         await signIn("credentials", {
-          email,
+          email: email.trim().toLowerCase(),
           password,
           callbackUrl: "/dashboard",
         });
       } else {
-        // Sign in existing user
         const result = await signIn("credentials", {
-          email,
+          email: email.trim().toLowerCase(),
           password,
           redirect: false,
         });
@@ -82,9 +155,15 @@ export default function AuthForm() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
+                className={`w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 ${
+                  fieldErrors.name ? "border-red-500" : ""
+                }`}
                 placeholder="Your name"
+                maxLength={50}
               />
+              {fieldErrors.name && (
+                <p className="mt-1 text-sm text-red-600">{fieldErrors.name}</p>
+              )}
             </div>
           )}
 
@@ -97,10 +176,14 @@ export default function AuthForm() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
+              className={`w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 ${
+                fieldErrors.email ? "border-red-500" : ""
+              }`}
               placeholder="you@example.com"
             />
+            {fieldErrors.email && (
+              <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>
+            )}
           </div>
 
           <div>
@@ -112,11 +195,19 @@ export default function AuthForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
+              className={`w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 ${
+                fieldErrors.password ? "border-red-500" : ""
+              }`}
               placeholder="••••••••"
             />
+            {fieldErrors.password && (
+              <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
+            )}
+            {isSignUp && !fieldErrors.password && (
+              <p className="mt-1 text-xs text-gray-500">
+                Must be at least 8 characters with uppercase, lowercase, and number
+              </p>
+            )}
           </div>
 
           {!isSignUp && (
