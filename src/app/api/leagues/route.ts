@@ -1,9 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
 
-const prisma = new PrismaClient();
+const safeUserSelect = {
+  id: true,
+  name: true,
+  image: true,
+};
+
+const createLeagueSchema = z.object({
+  name: z
+    .string()
+    .min(1, "League name is required")
+    .max(100, "League name must be 100 characters or less")
+    .trim(),
+  season: z
+    .number()
+    .int()
+    .min(2000, "Season must be 2000 or later")
+    .max(2100, "Season must be 2100 or earlier")
+    .optional(),
+  maxTeams: z
+    .number()
+    .int()
+    .min(4, "League must have at least 4 teams")
+    .max(32, "League cannot have more than 32 teams")
+    .optional(),
+  isPublic: z.boolean().optional(),
+  teamName: z
+    .string()
+    .min(1, "Team name is required")
+    .max(100, "Team name must be 100 characters or less")
+    .trim(),
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,24 +47,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, season, maxTeams, isPublic, teamName } = await request.json();
-
-    if (!name) {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "League name is required" },
+        { error: "Invalid JSON in request body" },
         { status: 400 }
       );
     }
 
-    if (!teamName) {
+    const validationResult = createLeagueSchema.safeParse(body);
+    if (!validationResult.success) {
+      const errors = validationResult.error.issues.map((e) => e.message);
       return NextResponse.json(
-        { error: "Team name is required" },
+        { error: errors[0], errors },
         { status: 400 }
       );
     }
+
+    const { name, season, maxTeams, isPublic, teamName } = validationResult.data;
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      select: { id: true },
     });
 
     if (!user) {
@@ -43,71 +80,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 1: Create the league
-    const league = await prisma.league.create({
-      data: {
-        name,
-        season: season || new Date().getFullYear(),
-        maxTeams: maxTeams || 12,
-        isPublic: isPublic || false,
-        createdById: user.id,
-      },
-    });
-
-    // Step 2: Create the membership (commissioner role for creator)
-    const membership = await prisma.leagueMembership.create({
-      data: {
-        userId: user.id,
-        leagueId: league.id,
-        role: "COMMISSIONER",
-      },
-    });
-
-    // Step 3: Create the team for the creator
-    const team = await prisma.team.create({
-      data: {
-        name: teamName,
-        userId: user.id,
-        leagueId: league.id,
-      },
-    });
-
-    // Fetch the full league with all related data to return
-    const fullLeague = await prisma.league.findUnique({
-      where: { id: league.id },
-      include: {
-        createdBy: true,
-        settings: true,
-        memberships: {
-          include: {
-            user: true,
-          },
+    const result = await prisma.$transaction(async (tx) => {
+      const league = await tx.league.create({
+        data: {
+          name,
+          season: season ?? new Date().getFullYear(),
+          maxTeams: maxTeams ?? 12,
+          isPublic: isPublic ?? false,
+          createdById: user.id,
         },
-        teams: {
-          include: {
-            user: true,
-            roster: true,
-            draftPicks: true,
-            homeMatchups: true,
-            awayMatchups: true,
-          },
+      });
+
+      const membership = await tx.leagueMembership.create({
+        data: {
+          userId: user.id,
+          leagueId: league.id,
+          role: "COMMISSIONER",
         },
-        drafts: true,
-        matchups: true,
-        trades: true,
-        waiverClaims: true,
-        transactions: true,
-        invites: true,
-        seasonRecords: true,
-      },
+      });
+
+      const team = await tx.team.create({
+        data: {
+          name: teamName,
+          userId: user.id,
+          leagueId: league.id,
+        },
+      });
+
+      return { league, membership, team };
     });
 
     return NextResponse.json(
       {
         message: "League created successfully",
-        league: fullLeague,
-        membership,
-        team,
+        league: {
+          id: result.league.id,
+          name: result.league.name,
+          season: result.league.season,
+          maxTeams: result.league.maxTeams,
+          isPublic: result.league.isPublic,
+        },
+        membership: {
+          id: result.membership.id,
+          role: result.membership.role,
+        },
+        team: {
+          id: result.team.id,
+          name: result.team.name,
+        },
       },
       { status: 201 }
     );
@@ -133,6 +153,7 @@ export async function GET(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      select: { id: true },
     });
 
     if (!user) {
@@ -142,37 +163,54 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get all leagues the user is a member of
     const memberships = await prisma.leagueMembership.findMany({
       where: { userId: user.id },
-    });
-
-    // Fetch each league separately (N+1 query pattern)
-    const leagues = [];
-    for (const membership of memberships) {
-      const league = await prisma.league.findUnique({
-        where: { id: membership.leagueId },
-        include: {
-          createdBy: true,
-          memberships: {
-            include: {
-              user: true,
+      select: {
+        role: true,
+        league: {
+          select: {
+            id: true,
+            name: true,
+            season: true,
+            maxTeams: true,
+            isPublic: true,
+            isActive: true,
+            createdAt: true,
+            createdBy: {
+              select: safeUserSelect,
             },
-          },
-          teams: {
-            include: {
-              user: true,
+            memberships: {
+              select: {
+                id: true,
+                role: true,
+                user: {
+                  select: safeUserSelect,
+                },
+              },
+            },
+            teams: {
+              select: {
+                id: true,
+                name: true,
+                wins: true,
+                losses: true,
+                ties: true,
+                pointsFor: true,
+                pointsAgainst: true,
+                user: {
+                  select: safeUserSelect,
+                },
+              },
             },
           },
         },
-      });
-      if (league) {
-        leagues.push({
-          ...league,
-          userRole: membership.role,
-        });
-      }
-    }
+      },
+    });
+
+    const leagues = memberships.map((membership) => ({
+      ...membership.league,
+      userRole: membership.role,
+    }));
 
     return NextResponse.json({ leagues });
   } catch (error) {
