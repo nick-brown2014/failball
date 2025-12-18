@@ -67,11 +67,12 @@ export interface MockUserData {
 }
 
 // 12 mock users to fill a league
+// Note: user_1 is Nick Brown (the app owner) who can log in with nick.brown2014@gmail.com
 export const mockUsers: MockUser[] = [
   {
     id: "user_1",
-    email: "mike.johnson@email.com",
-    name: "Mike Johnson",
+    email: "nick.brown2014@gmail.com",
+    name: "Nick Brown",
     image: null,
     createdAt: "2024-08-15T10:30:00Z",
   },
@@ -167,7 +168,7 @@ export const mockLeague: MockLeague = {
 export const mockTeams: MockTeam[] = [
   {
     id: "team_1",
-    name: "The Interception Kings",
+    name: "Brown's Blunders",
     userId: "user_1",
     leagueId: "league_1",
     wins: 8,
