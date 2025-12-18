@@ -137,6 +137,15 @@ export default function Dashboard() {
               <p><span className="font-medium">Member since:</span> {new Date(displayData.createdAt).toLocaleDateString()}</p>
             </div>
           )}
+          
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <Link
+              href="/auth/forgot-password"
+              className="text-sm font-medium text-orange-600 hover:text-orange-500"
+            >
+              Reset password
+            </Link>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-6">
