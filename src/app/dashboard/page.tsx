@@ -32,13 +32,16 @@ interface UserData {
 }
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [useMockData, setUseMockData] = useState(false);
   const [mockUserData, setMockUserData] = useState<MockUserData | null>(null);
   const [leagueStandings, setLeagueStandings] = useState<MockTeam[]>([]);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -69,6 +72,58 @@ export default function Dashboard() {
       setLoading(false);
     }
   }, [status]);
+
+  const handleStartEditName = () => {
+    const currentName = useMockData 
+      ? mockUserData?.name || "" 
+      : userData?.name || session?.user?.name || "";
+    setEditNameValue(currentName);
+    setIsEditingName(true);
+    setError("");
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+    setEditNameValue("");
+    setError("");
+  };
+
+  const handleSaveName = async () => {
+    if (!editNameValue.trim()) {
+      setError("Name cannot be empty");
+      return;
+    }
+
+    setIsSavingName(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/users", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: editNameValue.trim() }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (userData) {
+          setUserData({ ...userData, name: data.user.name });
+        }
+        await updateSession({ name: data.user.name });
+        setIsEditingName(false);
+        setEditNameValue("");
+      } else {
+        const errorData = await res.json();
+        setError(errorData.error || "Failed to update name");
+      }
+    } catch {
+      setError("An error occurred while updating your name");
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   if (status === "loading" || loading) {
     return (
@@ -129,7 +184,55 @@ export default function Dashboard() {
         )}
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Welcome, {displayName}!</h2>
+          <div className="mb-4">
+            {isEditingName ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xl font-semibold">Welcome, </span>
+                <input
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  className="text-xl font-semibold px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-700"
+                  disabled={isSavingName}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveName();
+                    if (e.key === "Escape") handleCancelEditName();
+                  }}
+                />
+                <span className="text-xl font-semibold">!</span>
+                <button
+                  onClick={handleSaveName}
+                  disabled={isSavingName}
+                  className="px-3 py-1 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingName ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={handleCancelEditName}
+                  disabled={isSavingName}
+                  className="px-3 py-1 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold">Welcome, {displayName}!</h2>
+                {!useMockData && (
+                  <button
+                    onClick={handleStartEditName}
+                    className="p-1 text-gray-400 hover:text-orange-600 transition-colors"
+                    title="Edit name"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           
           {displayData && (
             <div className="space-y-2 text-gray-600 dark:text-gray-300">
