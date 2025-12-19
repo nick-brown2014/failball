@@ -142,39 +142,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get all leagues the user is a member of
-    const memberships = await prisma.leagueMembership.findMany({
-      where: { userId: user.id },
+    // Get all leagues the user is a member of with a single optimized query
+    const leagues = await prisma.league.findMany({
+      where: {
+        memberships: {
+          some: { userId: user.id }
+        }
+      },
+      include: {
+        createdBy: true,
+        memberships: {
+          include: { user: true }
+        },
+        teams: {
+          include: { user: true }
+        }
+      }
     });
 
-    // Fetch each league separately (N+1 query pattern)
-    const leagues = [];
-    for (const membership of memberships) {
-      const league = await prisma.league.findUnique({
-        where: { id: membership.leagueId },
-        include: {
-          createdBy: true,
-          memberships: {
-            include: {
-              user: true,
-            },
-          },
-          teams: {
-            include: {
-              user: true,
-            },
-          },
-        },
-      });
-      if (league) {
-        leagues.push({
-          ...league,
-          userRole: membership.role,
-        });
-      }
-    }
+    // Add userRole to each league based on the user's membership
+    const leaguesWithRole = leagues.map(league => {
+      const userMembership = league.memberships.find(m => m.userId === user.id);
+      return {
+        ...league,
+        userRole: userMembership?.role || null,
+      };
+    });
 
-    return NextResponse.json({ leagues });
+    return NextResponse.json({ leagues: leaguesWithRole });
   } catch (error) {
     console.error("Get leagues error:", error);
     return NextResponse.json(
