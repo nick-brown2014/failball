@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import Navigation from "@/components/Navigation";
 import { getMockUserData, getLeagueStandings, getTeamOwnerName, type MockUserData, type MockTeam } from "@/lib/mockData";
@@ -32,13 +32,18 @@ interface UserData {
 }
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [useMockData, setUseMockData] = useState(false);
   const [mockUserData, setMockUserData] = useState<MockUserData | null>(null);
   const [leagueStandings, setLeagueStandings] = useState<MockTeam[]>([]);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameError, setNameError] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -69,6 +74,77 @@ export default function Dashboard() {
       setLoading(false);
     }
   }, [status]);
+
+  const startEditingName = () => {
+    const currentName = useMockData 
+      ? mockUserData?.name || ""
+      : userData?.name || session?.user?.name || "";
+    setEditedName(currentName);
+    setNameError("");
+    setIsEditingName(true);
+    setTimeout(() => nameInputRef.current?.focus(), 0);
+  };
+
+  const cancelEditingName = () => {
+    setIsEditingName(false);
+    setEditedName("");
+    setNameError("");
+  };
+
+  const saveNameChange = async () => {
+    if (useMockData) {
+      setNameError("Cannot save changes in demo mode");
+      return;
+    }
+
+    const trimmedName = editedName.trim();
+    if (!trimmedName) {
+      setNameError("Name cannot be empty");
+      return;
+    }
+
+    if (trimmedName.length > 100) {
+      setNameError("Name cannot exceed 100 characters");
+      return;
+    }
+
+    setIsSavingName(true);
+    setNameError("");
+
+    try {
+      const res = await fetch("/api/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedName }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (userData) {
+          setUserData({ ...userData, name: data.user.name });
+        }
+        await updateSession({ name: data.user.name });
+        setIsEditingName(false);
+        setEditedName("");
+      } else {
+        const errorData = await res.json();
+        setNameError(errorData.error || "Failed to update name");
+      }
+    } catch {
+      setNameError("An error occurred while saving");
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveNameChange();
+    } else if (e.key === "Escape") {
+      cancelEditingName();
+    }
+  };
 
   if (status === "loading" || loading) {
     return (
@@ -129,7 +205,63 @@ export default function Dashboard() {
         )}
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Welcome, {displayName}!</h2>
+          <div className="mb-4">
+            {isEditingName ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-semibold">Welcome,</span>
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    onKeyDown={handleNameKeyDown}
+                    onBlur={() => {
+                      if (!isSavingName && editedName.trim()) {
+                        saveNameChange();
+                      }
+                    }}
+                    disabled={isSavingName}
+                    className="text-xl font-semibold px-2 py-1 border border-orange-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-700 dark:border-gray-600"
+                    placeholder="Enter your name"
+                  />
+                  <span className="text-xl font-semibold">!</span>
+                </div>
+                {nameError && (
+                  <p className="text-sm text-red-600 dark:text-red-400">{nameError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveNameChange}
+                    disabled={isSavingName}
+                    className="px-3 py-1 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    {isSavingName ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    onClick={cancelEditingName}
+                    disabled={isSavingName}
+                    className="px-3 py-1 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 dark:text-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold">Welcome, {displayName}!</h2>
+                <button
+                  onClick={startEditingName}
+                  className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                  title="Edit name"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
           
           {displayData && (
             <div className="space-y-2 text-gray-600 dark:text-gray-300">
