@@ -43,38 +43,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 1: Create the league
-    const league = await prisma.league.create({
-      data: {
-        name,
-        season: season || new Date().getFullYear(),
-        maxTeams: maxTeams || 12,
-        isPublic: isPublic || false,
-        createdById: user.id,
-      },
-    });
+    // Create league, membership, and team in a single transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Step 1: Create the league
+      const league = await tx.league.create({
+        data: {
+          name,
+          season: season || new Date().getFullYear(),
+          maxTeams: maxTeams || 12,
+          isPublic: isPublic || false,
+          createdById: user.id,
+        },
+      });
 
-    // Step 2: Create the membership (commissioner role for creator)
-    const membership = await prisma.leagueMembership.create({
-      data: {
-        userId: user.id,
-        leagueId: league.id,
-        role: "COMMISSIONER",
-      },
-    });
+      // Step 2: Create the membership (commissioner role for creator)
+      const membership = await tx.leagueMembership.create({
+        data: {
+          userId: user.id,
+          leagueId: league.id,
+          role: "COMMISSIONER",
+        },
+      });
 
-    // Step 3: Create the team for the creator
-    const team = await prisma.team.create({
-      data: {
-        name: teamName,
-        userId: user.id,
-        leagueId: league.id,
-      },
+      // Step 3: Create the team for the creator
+      const team = await tx.team.create({
+        data: {
+          name: teamName,
+          userId: user.id,
+          leagueId: league.id,
+        },
+      });
+
+      return { league, membership, team };
     });
 
     // Fetch the full league with all related data to return
     const fullLeague = await prisma.league.findUnique({
-      where: { id: league.id },
+      where: { id: result.league.id },
       include: {
         createdBy: true,
         settings: true,
@@ -106,8 +111,8 @@ export async function POST(request: NextRequest) {
       {
         message: "League created successfully",
         league: fullLeague,
-        membership,
-        team,
+        membership: result.membership,
+        team: result.team,
       },
       { status: 201 }
     );
