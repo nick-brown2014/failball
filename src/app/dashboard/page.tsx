@@ -255,7 +255,7 @@ export default function Dashboard() {
             {displayData?.memberships && displayData.memberships.length > 0 ? (
               <ul className="space-y-2">
                 {displayData.memberships.map((membership) => (
-                  <li key={membership.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                  <a href={`/leagues/${membership.league.id}`} key={membership.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded">
                     <div>
                       <span className="font-medium">{membership.league.name}</span>
                       <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
@@ -269,7 +269,7 @@ export default function Dashboard() {
                     }`}>
                       {membership.role}
                     </span>
-                  </li>
+                  </a>
                 ))}
               </ul>
             ) : (
