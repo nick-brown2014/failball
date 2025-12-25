@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,15 +25,20 @@ export async function POST(request: NextRequest) {
       where: { email },
     });
 
+    // SECURITY FIX: Always hash the password to prevent timing attacks
+    // This ensures the response time is consistent whether the user exists or not
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     if (existingUser) {
+      // SECURITY FIX: Return a generic success message to prevent account enumeration
+      // An attacker cannot determine if an email is registered based on the response
       return NextResponse.json(
-        { error: "User with this email already exists" },
-        { status: 400 }
+        {
+          message: "If this email is not already registered, your account has been created. Please check your email to verify your account.",
+        },
+        { status: 200 }
       );
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
 
     // Create user
     const user = await prisma.user.create({
@@ -46,15 +49,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Return the same generic message for new registrations
+    // This prevents attackers from distinguishing between new and existing accounts
     return NextResponse.json(
       {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        },
+        message: "If this email is not already registered, your account has been created. Please check your email to verify your account.",
       },
-      { status: 201 }
+      { status: 200 }
     );
   } catch (error) {
     console.error("Registration error:", error);
