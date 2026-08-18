@@ -1,0 +1,8 @@
+{
+  "crons": [
+    { "path": "/api/sync/schedule", "schedule": "0 9 * * *" },
+    { "path": "/api/sync/players", "schedule": "30 9 * * *" },
+    { "path": "/api/sync/live", "schedule": "* * * * *" },
+    { "path": "/api/sync/charting", "schedule": "0 8 * * 2" }
+  ]
+}
