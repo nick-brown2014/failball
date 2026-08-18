@@ -259,6 +259,7 @@ export async function makeDraftPick({
         round: resolution.round,
         pickNumber: draft.currentPick,
         externalPlayerId,
+        isAutopick: autopick,
       },
     });
     await tx.rosterSlot.create({

@@ -161,14 +161,6 @@ export function publishDraftUpdate(
 }
 
 /** Format one event as an SSE frame. */
-export function formatSseFrame(event: LiveScoreEvent): string {
-  return formatSseChannelFrame(event);
-}
-
-export function formatDraftSseFrame(event: DraftUpdateEvent): string {
-  return formatSseChannelFrame(event);
-}
-
-function formatSseChannelFrame<E extends { type: string }>(event: E): string {
+export function formatSseFrame<E extends { type: string }>(event: E): string {
   return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
 }

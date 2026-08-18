@@ -184,17 +184,6 @@ export async function getDraftState(leagueId: string, email: string) {
   const rosterPlayersById = new Map(
     rosterPlayers.map((player) => [player.externalPlayerId, player]),
   );
-  const draftTransactions = draft
-    ? await prisma.transaction.findMany({
-        where: { leagueId, type: "DRAFT", externalPlayerId: { in: externalIds } },
-        select: { externalPlayerId: true, action: true },
-      })
-    : [];
-  const autopickedIds = new Set(
-    draftTransactions
-      .filter((transaction) => transaction.action.startsWith("Auto-drafted"))
-      .map((transaction) => transaction.externalPlayerId),
-  );
   const rosterByTeam = new Map<string, typeof rosterSlots>();
   for (const slot of rosterSlots) {
     const current = rosterByTeam.get(slot.teamId) ?? [];
@@ -253,7 +242,7 @@ export async function getDraftState(leagueId: string, email: string) {
         teamId: pick.teamId,
         externalPlayerId: pick.externalPlayerId,
         pickedAt: pick.pickedAt,
-        autopick: autopickedIds.has(pick.externalPlayerId),
+        autopick: pick.isAutopick,
         player: playersById.get(pick.externalPlayerId) ?? null,
       })) ?? [],
     callerTeamId: member.team?.id ?? null,

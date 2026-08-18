@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { getDraftMember } from "@/lib/draft/state";
 import {
-  formatDraftSseFrame,
+  formatSseFrame,
   subscribeDraft,
 } from "@/lib/realtime/events";
 
@@ -43,7 +43,7 @@ export async function GET(
       };
       send(": connected\n\n");
       unsubscribe = subscribeDraft((event) => {
-        if (event.leagueId === id) send(formatDraftSseFrame(event));
+        if (event.leagueId === id) send(formatSseFrame(event));
       });
       heartbeat = setInterval(() => send(": ping\n\n"), HEARTBEAT_MS);
       request.signal.addEventListener("abort", () => {
