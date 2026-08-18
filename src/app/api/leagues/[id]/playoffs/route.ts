@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { generateSchedule, getSchedule, ScheduleError } from "@/lib/schedule/service";
-import { sortStandings } from "@/lib/schedule/standings";
+import {
+  generatePlayoffBracket,
+  getPlayoffBracket,
+  PlayoffError,
+} from "@/lib/schedule/playoffs";
 
 async function getMembership(leagueId: string, email: string) {
   const user = await prisma.user.findUnique({
@@ -26,7 +29,7 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "You must be logged in to view the schedule", code: "UNAUTHORIZED" },
+        { error: "You must be logged in to view the playoffs", code: "UNAUTHORIZED" },
         { status: 401 },
       );
     }
@@ -37,25 +40,7 @@ export async function GET(
       select: {
         id: true,
         season: true,
-        settings: {
-          select: {
-            regularSeasonWeeks: true,
-            playoffStartWeek: true,
-            playoffTeams: true,
-          },
-        },
-        teams: {
-          select: {
-            id: true,
-            name: true,
-            wins: true,
-            losses: true,
-            ties: true,
-            pointsFor: true,
-            pointsAgainst: true,
-            user: { select: { id: true, name: true, email: true } },
-          },
-        },
+        settings: { select: { playoffTeams: true, playoffStartWeek: true } },
       },
     });
     if (!league) {
@@ -73,43 +58,23 @@ export async function GET(
       );
     }
 
-    const weeks = await getSchedule({ leagueId: id, season: league.season });
-    const allMatchups = weeks.flatMap((week) =>
-      week.matchups.map((matchup) => ({
-        homeTeamId: matchup.homeTeam.id,
-        awayTeamId: matchup.awayTeam.id,
-        homeScore: matchup.homeScore,
-        awayScore: matchup.awayScore,
-        isComplete: matchup.isComplete,
-      })),
-    );
-
-    const standings = sortStandings(
-      league.teams.map((team) => ({
-        teamId: team.id,
-        name: team.name,
-        wins: team.wins,
-        losses: team.losses,
-        ties: team.ties,
-        pointsFor: Number(team.pointsFor),
-        pointsAgainst: Number(team.pointsAgainst),
-        user: team.user,
-      })),
-      allMatchups,
-    ).map((team, index) => ({ ...team, rank: index + 1 }));
-
+    const bracket = await getPlayoffBracket({ leagueId: id, season: league.season });
     return NextResponse.json({
-      season: league.season,
-      regularSeasonWeeks: league.settings?.regularSeasonWeeks ?? 14,
+      bracket,
       playoffTeams: league.settings?.playoffTeams ?? 6,
-      weeks,
-      standings,
+      playoffStartWeek: league.settings?.playoffStartWeek ?? 15,
       role: membership.role,
     });
   } catch (error) {
-    console.error("Get league schedule error:", error);
+    if (error instanceof PlayoffError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 409 },
+      );
+    }
+    console.error("Get league playoffs error:", error);
     return NextResponse.json(
-      { error: "An error occurred while fetching the schedule", code: "INTERNAL_ERROR" },
+      { error: "An error occurred while fetching the playoffs", code: "INTERNAL_ERROR" },
       { status: 500 },
     );
   }
@@ -123,10 +88,7 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json(
-        {
-          error: "You must be logged in to generate the schedule",
-          code: "UNAUTHORIZED",
-        },
+        { error: "You must be logged in to generate the playoffs", code: "UNAUTHORIZED" },
         { status: 401 },
       );
     }
@@ -147,28 +109,25 @@ export async function POST(
     if (membership?.role !== "COMMISSIONER") {
       return NextResponse.json(
         {
-          error: "Only the commissioner can generate the schedule",
+          error: "Only the commissioner can generate the playoffs",
           code: "FORBIDDEN",
         },
         { status: 403 },
       );
     }
 
-    const result = await generateSchedule({ leagueId: id });
+    const result = await generatePlayoffBracket({ leagueId: id });
     return NextResponse.json({ ok: true, ...result }, { status: 201 });
   } catch (error) {
-    if (error instanceof ScheduleError) {
+    if (error instanceof PlayoffError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
         { status: 409 },
       );
     }
-    console.error("Generate league schedule error:", error);
+    console.error("Generate league playoffs error:", error);
     return NextResponse.json(
-      {
-        error: "An error occurred while generating the schedule",
-        code: "INTERNAL_ERROR",
-      },
+      { error: "An error occurred while generating the playoffs", code: "INTERNAL_ERROR" },
       { status: 500 },
     );
   }

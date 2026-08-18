@@ -14,6 +14,11 @@
 import { GameStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { recomputeWeekScores } from "@/lib/scoring/updateMatchups";
+import {
+  advancePlayoffs,
+  generatePlayoffBracket,
+  PlayoffError,
+} from "./playoffs";
 import { computeTeamRecords, type StandingsMatchup } from "./standings";
 
 export interface FinalizeWeekResult {
@@ -23,6 +28,7 @@ export interface FinalizeWeekResult {
   reason?: string;
   matchupsCompleted: number;
   leaguesUpdated: number;
+  playoffErrors?: Array<{ leagueId: string; code: string; message: string }>;
 }
 
 export async function isWeekFinalizable(options: {
@@ -88,7 +94,7 @@ export async function finalizeWeek(options: {
 
   const weekMatchups = await prisma.matchup.findMany({
     where: { season, week, ...leagueFilter },
-    select: { id: true, leagueId: true },
+    select: { id: true, leagueId: true, isPlayoff: true },
   });
   if (weekMatchups.length === 0) {
     return {
@@ -115,8 +121,26 @@ export async function finalizeWeek(options: {
   });
 
   const affectedLeagueIds = [...new Set(weekMatchups.map((matchup) => matchup.leagueId))];
+  const playoffErrors: Array<{ leagueId: string; code: string; message: string }> = [];
   for (const leagueId of affectedLeagueIds) {
     await recomputeLeagueRecords({ leagueId, season });
+    const leagueMatchups = weekMatchups.filter((matchup) => matchup.leagueId === leagueId);
+    try {
+      if (leagueMatchups.some((matchup) => matchup.isPlayoff)) {
+        await advancePlayoffs({ leagueId, season, week });
+      } else {
+        const settings = await prisma.leagueSettings.findUnique({
+          where: { leagueId },
+          select: { regularSeasonWeeks: true },
+        });
+        if (week === (settings?.regularSeasonWeeks ?? 14)) {
+          await generatePlayoffBracket({ leagueId });
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof PlayoffError)) throw error;
+      playoffErrors.push({ leagueId, code: error.code, message: error.message });
+    }
   }
 
   return {
@@ -125,6 +149,7 @@ export async function finalizeWeek(options: {
     finalized: true,
     matchupsCompleted: weekMatchups.length,
     leaguesUpdated: affectedLeagueIds.length,
+    playoffErrors,
   };
 }
 
