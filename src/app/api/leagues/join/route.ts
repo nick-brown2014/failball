@@ -142,13 +142,19 @@ export async function POST(request: NextRequest) {
       const team = await transaction.team.create({
         data: { name: teamName, userId: user.id, leagueId: invite.leagueId },
       });
+      const inviteUsageConditions: Prisma.LeagueInviteWhereInput[] = [
+        { maxUses: null },
+      ];
+      if (currentInvite.maxUses !== null) {
+        inviteUsageConditions.push({
+          usedCount: { lt: currentInvite.maxUses },
+        });
+      }
+
       const updatedInvite = await transaction.leagueInvite.updateMany({
         where: {
           id: invite.id,
-          OR: [
-            { maxUses: null },
-            { usedCount: { lt: currentInvite.maxUses ?? Number.MAX_SAFE_INTEGER } },
-          ],
+          OR: inviteUsageConditions,
         },
         data: { usedCount: { increment: 1 } },
       });
