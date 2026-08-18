@@ -65,6 +65,7 @@ export async function GET(
           active: true,
         },
         orderBy: [
+          { nflTeam: { sort: "asc", nulls: "last" } },
           { position: "asc" },
           { fullName: "asc" },
           { externalPlayerId: "asc" },
