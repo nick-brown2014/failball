@@ -421,16 +421,16 @@ function Lobby({
         <h2 className="text-xl font-bold">Draft settings</h2>
         <div className="mt-4 space-y-4 text-sm">
           <label className="block">Type
-            <select disabled={!isCommissioner || !!state.draft} value={settings.draftType} onChange={(event) => setSettings({ ...settings, draftType: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 dark:bg-gray-700">
+            <select disabled={!isCommissioner || state.draft?.status !== "SCHEDULED"} value={settings.draftType} onChange={(event) => setSettings({ ...settings, draftType: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 dark:bg-gray-700">
               <option value="SNAKE">Snake</option>
               <option value="LINEAR">Linear</option>
             </select>
           </label>
           <label className="block">Seconds per pick
-            <input disabled={!isCommissioner || !!state.draft} type="number" min={5} value={settings.secondsPerPick} onChange={(event) => setSettings({ ...settings, secondsPerPick: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 dark:bg-gray-700" />
+            <input disabled={!isCommissioner || state.draft?.status !== "SCHEDULED"} type="number" min={5} value={settings.secondsPerPick} onChange={(event) => setSettings({ ...settings, secondsPerPick: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 dark:bg-gray-700" />
           </label>
           <label className="block">Rounds
-            <input disabled={!isCommissioner || !!state.draft} type="number" min={1} value={settings.totalRounds} onChange={(event) => setSettings({ ...settings, totalRounds: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 dark:bg-gray-700" />
+            <input disabled={!isCommissioner || state.draft?.status !== "SCHEDULED"} type="number" min={1} value={settings.totalRounds} onChange={(event) => setSettings({ ...settings, totalRounds: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 dark:bg-gray-700" />
           </label>
         </div>
         {isCommissioner ? (
