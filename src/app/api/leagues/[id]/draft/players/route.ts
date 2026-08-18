@@ -1,4 +1,4 @@
-import { Position } from "@prisma/client";
+import { Prisma, Position } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
@@ -44,35 +44,34 @@ export async function GET(
       Math.max(1, Number(request.nextUrl.searchParams.get("limit") ?? 50) || 50),
     );
     // PostgreSQL enum ordering is QB, RB, WR, TE, ST, DEF, FLEX, matching DRAFT_POSITION_ORDER.
+    const positionFilter =
+      position && Object.values(Position).includes(position as Position)
+        ? (position as Position)
+        : null;
     const [players, total] = await Promise.all([
-      prisma.player.findMany({
-        where: {
-          active: true,
-          position: { not: null },
-          ...(q
-            ? { fullName: { contains: q, mode: "insensitive" } }
-            : {}),
-          ...(position && Object.values(Position).includes(position as Position)
-            ? { position: position as Position }
-            : {}),
-        },
-        select: {
-          externalPlayerId: true,
-          fullName: true,
-          position: true,
-          nflTeam: true,
-          injuryStatus: true,
-          active: true,
-        },
-        orderBy: [
-          { nflTeam: { sort: "asc", nulls: "last" } },
-          { position: "asc" },
-          { fullName: "asc" },
-          { externalPlayerId: "asc" },
-        ],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
+      prisma.$queryRaw<
+        Array<{
+          externalPlayerId: string;
+          fullName: string;
+          position: Position;
+          nflTeam: string | null;
+          injuryStatus: string | null;
+          active: boolean;
+        }>
+      >(Prisma.sql`
+        SELECT "externalPlayerId", "fullName", "position", "nflTeam", "injuryStatus", "active"
+        FROM "public"."players"
+        WHERE "active" = true
+          AND "position" IS NOT NULL
+          ${q ? Prisma.sql`AND "fullName" ILIKE '%' || ${q} || '%'` : Prisma.empty}
+          ${
+            positionFilter
+              ? Prisma.sql`AND "position" = ${positionFilter}::"Position"`
+              : Prisma.empty
+          }
+        ORDER BY ("nflTeam" IS NULL) ASC, "position" ASC, "fullName" ASC, "externalPlayerId" ASC
+        LIMIT ${limit} OFFSET ${(page - 1) * limit}
+      `),
       prisma.player.count({
         where: {
           active: true,
