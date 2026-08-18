@@ -9,23 +9,94 @@ interface ValidationError {
 }
 
 const integerFields = [
-  "rosterSize", "benchSize", "qbSlots", "rbSlots", "wrSlots", "teSlots",
-  "flexSlots", "stSlots", "defSlots", "irSlots", "regularSeasonWeeks",
-  "playoffTeams", "playoffStartWeek", "tradeDeadlineWeek", "waiverProcessDay",
+  "rosterSize",
+  "benchSize",
+  "qbSlots",
+  "rbSlots",
+  "wrSlots",
+  "teSlots",
+  "flexSlots",
+  "stSlots",
+  "defSlots",
+  "irSlots",
+  "regularSeasonWeeks",
+  "playoffTeams",
+  "playoffStartWeek",
+  "tradeDeadlineWeek",
+  "waiverProcessDay",
 ] as const;
 
+const integerRanges: Record<
+  (typeof integerFields)[number],
+  { min: number; max: number }
+> = {
+  rosterSize: { min: 1, max: 100 },
+  benchSize: { min: 0, max: 50 },
+  qbSlots: { min: 0, max: 20 },
+  rbSlots: { min: 0, max: 20 },
+  wrSlots: { min: 0, max: 20 },
+  teSlots: { min: 0, max: 20 },
+  flexSlots: { min: 0, max: 20 },
+  stSlots: { min: 0, max: 20 },
+  defSlots: { min: 0, max: 20 },
+  irSlots: { min: 0, max: 20 },
+  regularSeasonWeeks: { min: 1, max: 40 },
+  playoffTeams: { min: 2, max: 20 },
+  playoffStartWeek: { min: 1, max: 40 },
+  tradeDeadlineWeek: { min: 0, max: 40 },
+  waiverProcessDay: { min: 0, max: 6 },
+};
+
 const decimalFields = [
-  "qbIncompletion", "qbInterception", "qbSack", "qbScramble", "qbFumble", "qbTouchdown",
-  "rbNegativeRun", "rbNeutralRun", "rbSuccessfulRun", "rbExplosiveRun", "rbFumble", "rbTouchdown",
-  "pcIncompleteTarget", "pcDrop", "pcRouteNotTargeted", "pcNegativeCatch", "pcNeutralCatch",
-  "pcSuccessfulCatch", "pcExplosiveCatch", "pcFumble", "pcTouchdown",
-  "defTouchdownAllowed", "defFieldGoalAllowed", "defYardsAllowed0to100", "defYardsAllowed100to200",
-  "defYardsAllowed200to300", "defYardsAllowed300to400", "defYardsAllowed400to500",
-  "defYardsAllowed500plus", "defSack", "defSafety", "defInterception", "defFumbleRecovery",
-  "defPickSix", "defFumbleReturnTd", "stMissedExtraPoint", "stMissedFieldGoal",
-  "stMadeFieldGoalUnder50", "stMadeFieldGoalOver50", "stKickoffReturnTd", "stKickoffMuffed",
-  "stKickoffStuffed", "stPuntReturnTd", "stPuntMuffed", "stPuntStuffed", "stPuntTouchback",
-  "stPuntBlocked", "stOnsideKickFail", "stPenaltyExtendDrive",
+  "qbIncompletion",
+  "qbInterception",
+  "qbSack",
+  "qbScramble",
+  "qbFumble",
+  "qbTouchdown",
+  "rbNegativeRun",
+  "rbNeutralRun",
+  "rbSuccessfulRun",
+  "rbExplosiveRun",
+  "rbFumble",
+  "rbTouchdown",
+  "pcIncompleteTarget",
+  "pcDrop",
+  "pcRouteNotTargeted",
+  "pcNegativeCatch",
+  "pcNeutralCatch",
+  "pcSuccessfulCatch",
+  "pcExplosiveCatch",
+  "pcFumble",
+  "pcTouchdown",
+  "defTouchdownAllowed",
+  "defFieldGoalAllowed",
+  "defYardsAllowed0to100",
+  "defYardsAllowed100to200",
+  "defYardsAllowed200to300",
+  "defYardsAllowed300to400",
+  "defYardsAllowed400to500",
+  "defYardsAllowed500plus",
+  "defSack",
+  "defSafety",
+  "defInterception",
+  "defFumbleRecovery",
+  "defPickSix",
+  "defFumbleReturnTd",
+  "stMissedExtraPoint",
+  "stMissedFieldGoal",
+  "stMadeFieldGoalUnder50",
+  "stMadeFieldGoalOver50",
+  "stKickoffReturnTd",
+  "stKickoffMuffed",
+  "stKickoffStuffed",
+  "stPuntReturnTd",
+  "stPuntMuffed",
+  "stPuntStuffed",
+  "stPuntTouchback",
+  "stPuntBlocked",
+  "stOnsideKickFail",
+  "stPenaltyExtendDrive",
 ] as const;
 
 const acceptedFields = new Set<string>([
@@ -47,9 +118,16 @@ function validateSettings(body: Record<string, unknown>) {
   for (const field of integerFields) {
     if (!(field in body)) continue;
     const value = body[field];
-    const max = field === "waiverProcessDay" ? 6 : field === "playoffTeams" ? 20 : field === "regularSeasonWeeks" || field === "playoffStartWeek" || field === "tradeDeadlineWeek" ? 40 : field === "rosterSize" ? 100 : 50;
-    if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > max || (field === "regularSeasonWeeks" && value === 0) || (field === "playoffTeams" && (value as number) < 2)) {
-      errors.push({ field, message: `Must be an integer between ${field === "playoffTeams" ? 2 : field === "regularSeasonWeeks" ? 1 : 0} and ${max}` });
+    const range = integerRanges[field];
+    if (
+      !Number.isInteger(value) ||
+      (value as number) < range.min ||
+      (value as number) > range.max
+    ) {
+      errors.push({
+        field,
+        message: `Must be an integer between ${range.min} and ${range.max}`,
+      });
     } else {
       data[field] = value;
     }
@@ -66,9 +144,23 @@ function validateSettings(body: Record<string, unknown>) {
   for (const field of decimalFields) {
     if (!(field in body)) continue;
     const value = body[field];
-    const number = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
-    if (!Number.isFinite(number) || Math.abs(number) > 99.99 || Math.round(number * 100) !== number * 100) {
-      errors.push({ field, message: "Must be a finite number between -99.99 and 99.99 with at most two decimal places" });
+    const number =
+      typeof value === "number"
+        ? value
+        : typeof value === "string" && value.trim() !== ""
+          ? Number(value)
+          : NaN;
+    const scaledNumber = number * 100;
+    if (
+      !Number.isFinite(number) ||
+      Math.abs(number) > 99.99 ||
+      Math.abs(Math.round(scaledNumber) - scaledNumber) > 1e-9
+    ) {
+      errors.push({
+        field,
+        message:
+          "Must be a finite number between -99.99 and 99.99 with at most two decimal places",
+      });
     } else {
       data[field] = number;
     }
@@ -103,9 +195,21 @@ export async function GET(
     }
     const { membership } = await getUserAndMembership(id, session.user.email);
     if (!membership) {
-      return NextResponse.json({ error: "You are not a member of this league", code: "FORBIDDEN" }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: "You are not a member of this league",
+          code: "FORBIDDEN",
+        },
+        { status: 403 }
+      );
     }
     const settings = await prisma.leagueSettings.findUnique({ where: { leagueId: id } });
+    if (!settings) {
+      return NextResponse.json(
+        { error: "League settings not found", code: "NOT_FOUND" },
+        { status: 404 }
+      );
+    }
     return NextResponse.json({ settings, role: membership.role });
   } catch (error) {
     console.error("Get league settings error:", error);
