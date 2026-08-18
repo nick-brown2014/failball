@@ -252,6 +252,13 @@ export default function LeaguePage() {
   const weeks = schedule?.weeks ?? [];
   const activeWeek =
     weeks.find((week) => week.week === selectedWeek) ?? weeks[0] ?? null;
+  const myTeam = league.teams.find((team) => team.user.id === userId);
+  const myMatchup = myTeam
+    ? activeWeek?.matchups.find(
+        (matchup) =>
+          matchup.homeTeam.id === myTeam.id || matchup.awayTeam.id === myTeam.id,
+      )
+    : null;
 
   return (
     <div className="font-sans min-h-screen w-full">
@@ -442,31 +449,45 @@ export default function LeaguePage() {
                     ))}
                   </div>
 
+                  {myMatchup && (
+                    <Link
+                      href={`/leagues/${league.id}/matchups/${myMatchup.id}`}
+                      className="mb-4 inline-block text-sm font-medium text-orange-600 hover:text-orange-500"
+                    >
+                      My matchup this week &rarr;
+                    </Link>
+                  )}
+
                   <ul className="space-y-3 text-sm">
                     {activeWeek?.matchups.map((matchup) => (
                       <li
                         key={matchup.id}
                         className="rounded border border-gray-200 dark:border-gray-700 p-3"
                       >
-                        <div className="flex justify-between">
-                          <span>{matchup.awayTeam.name}</span>
-                          <span className="font-medium">
-                            {matchup.awayScore == null
-                              ? "\u2014"
-                              : matchup.awayScore.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>at {matchup.homeTeam.name}</span>
-                          <span className="font-medium">
-                            {matchup.homeScore == null
-                              ? "\u2014"
-                              : matchup.homeScore.toFixed(1)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-gray-500">
-                          {matchup.isComplete ? "Final" : "Not played"}
-                        </p>
+                        <Link
+                          href={`/leagues/${league.id}/matchups/${matchup.id}`}
+                          className="block hover:text-orange-600"
+                        >
+                          <div className="flex justify-between">
+                            <span>{matchup.awayTeam.name}</span>
+                            <span className="font-medium">
+                              {matchup.awayScore == null
+                                ? "\u2014"
+                                : matchup.awayScore.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>at {matchup.homeTeam.name}</span>
+                            <span className="font-medium">
+                              {matchup.homeScore == null
+                                ? "\u2014"
+                                : matchup.homeScore.toFixed(1)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {matchup.isComplete ? "Final" : "Not played"}
+                          </p>
+                        </Link>
                       </li>
                     ))}
                   </ul>
