@@ -368,6 +368,7 @@ model Draft {
   currentPick    Int         @default(1)
   secondsPerPick Int         @default(90)
   totalRounds    Int         @default(15)
+  pickDeadline   DateTime?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 

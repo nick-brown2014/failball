@@ -182,6 +182,12 @@ export default function LeaguePage() {
           {role === "COMMISSIONER" && (
             <div className="flex gap-2">
               <Link
+                href={`/leagues/${league.id}/draft`}
+                className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+              >
+                Draft Room
+              </Link>
+              <Link
                 href={`/leagues/${league.id}/settings`}
                 className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
               >
@@ -194,6 +200,14 @@ export default function LeaguePage() {
                 Invite
               </button>
             </div>
+          )}
+          {role !== "COMMISSIONER" && (
+            <Link
+              href={`/leagues/${league.id}/draft`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Draft Room
+            </Link>
           )}
         </div>
 
