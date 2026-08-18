@@ -125,13 +125,6 @@ export function getPlayoffRoundPlan(options: {
   ];
 }
 
-export function generateInitialPlayoffBracket(options: {
-  playoffTeams: number;
-  playoffStartWeek: number;
-}): PlayoffPairing[] {
-  return getPlayoffRoundPlan(options);
-}
-
 /** Describe every round and its week, independent of the teams that advance. */
 export function getPlayoffPlan(options: {
   playoffTeams: number;
@@ -369,7 +362,7 @@ export async function generatePlayoffBracket(options: {
     playoffTeams,
   });
   const bySeed = new Map(seeds.map((team) => [team.seed, team.teamId]));
-  const pairings = generateInitialPlayoffBracket({ playoffTeams, playoffStartWeek });
+  const pairings = getPlayoffRoundPlan({ playoffTeams, playoffStartWeek });
 
   await prisma.$transaction(async (tx) => {
     await tx.matchup.deleteMany({
@@ -402,7 +395,7 @@ export async function advancePlayoffs(options: {
   week: number;
 }): Promise<{ created: number; week: number | null }> {
   const { leagueId, season, week } = options;
-  const { league, playoffTeams } = await loadLeagueForPlayoffs(leagueId);
+  const { league, playoffTeams, playoffStartWeek } = await loadLeagueForPlayoffs(leagueId);
   if (league.season !== season) return { created: 0, week: null };
 
   const current = await prisma.matchup.findMany({
@@ -423,10 +416,34 @@ export async function advancePlayoffs(options: {
   }
 
   const seeds = seedMap(await getSeedsForLeague(leagueId, season, playoffTeams));
-  const round = current[0].playoffRound!;
-  if (round === PlayoffRound.CHAMPIONSHIP) return { created: 0, week: null };
+  const currentRounds = new Set(
+    current.map((matchup) => matchup.playoffRound).filter(
+      (round): round is PlayoffRound => round !== null,
+    ),
+  );
+  if (
+    currentRounds.has(PlayoffRound.CHAMPIONSHIP) ||
+    currentRounds.has(PlayoffRound.THIRD_PLACE)
+  ) {
+    return { created: 0, week: null };
+  }
 
-  const targetWeek = week + 1;
+  const plan = getPlayoffPlan({
+    playoffTeams,
+    playoffStartWeek,
+  });
+  const currentRound = currentRounds.has(PlayoffRound.WILDCARD)
+    ? PlayoffRound.WILDCARD
+    : currentRounds.has(PlayoffRound.SEMIFINAL)
+      ? PlayoffRound.SEMIFINAL
+      : null;
+  if (!currentRound) return { created: 0, week: null };
+  const nextRound = currentRound === PlayoffRound.WILDCARD
+    ? PlayoffRound.SEMIFINAL
+    : PlayoffRound.CHAMPIONSHIP;
+  const nextPlan = plan.find((round) => round.playoffRound === nextRound);
+  if (!nextPlan) return { created: 0, week: null };
+  const targetWeek = nextPlan.week;
   const targetExists = await prisma.matchup.count({
     where: { leagueId, season, week: targetWeek, isPlayoff: true },
   });
@@ -442,7 +459,7 @@ export async function advancePlayoffs(options: {
   if (winners.length !== current.length) return { created: 0, week: null };
 
   let pairings: Array<PlayoffPairing & { homeTeamId: string; awayTeamId: string }> = [];
-  if (round === PlayoffRound.WILDCARD) {
+  if (currentRound === PlayoffRound.WILDCARD) {
     const surviving = playoffTeams === 6
       ? [1, 2, ...winners.map((teamId) => seeds.get(teamId)!)]
       : winners.map((teamId) => seeds.get(teamId)!);
@@ -453,7 +470,7 @@ export async function advancePlayoffs(options: {
       playoffRound: PlayoffRound.SEMIFINAL,
       week: targetWeek,
     });
-  } else if (round === PlayoffRound.SEMIFINAL) {
+  } else if (currentRound === PlayoffRound.SEMIFINAL) {
     const championship = reseedPlayoffPairings({
       teamIds: winners,
       seeds,
@@ -473,6 +490,7 @@ export async function advancePlayoffs(options: {
     pairings = [...championship, ...thirdPlace];
   }
 
+  if (pairings.length === 0) return { created: 0, week: null };
   await prisma.matchup.createMany({
     data: pairings.map((pairing) => ({
       leagueId,

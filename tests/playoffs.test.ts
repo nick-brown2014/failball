@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   derivePlayoffSeeds,
+  getPlayoffPlan,
   getPlayoffRoundPlan,
   PlayoffError,
   reseedPlayoffPairings,
@@ -50,6 +51,36 @@ describe("playoff bracket rules", () => {
       .toThrowError(PlayoffError);
     expect(() => getPlayoffRoundPlan({ playoffTeams: 10, playoffStartWeek: 15 }))
       .toThrow(/2, 4, 6, or 8/);
+  });
+
+  it.each([
+    [2, [
+      ["CHAMPIONSHIP", 15],
+    ]],
+    [4, [
+      ["SEMIFINAL", 15],
+      ["CHAMPIONSHIP", 16],
+      ["THIRD_PLACE", 16],
+    ]],
+    [6, [
+      ["WILDCARD", 15],
+      ["SEMIFINAL", 16],
+      ["CHAMPIONSHIP", 17],
+      ["THIRD_PLACE", 17],
+    ]],
+    [8, [
+      ["WILDCARD", 15],
+      ["SEMIFINAL", 16],
+      ["CHAMPIONSHIP", 17],
+      ["THIRD_PLACE", 17],
+    ]],
+  ])("plans every round and week for %i teams", (playoffTeams, expected) => {
+    expect(
+      getPlayoffPlan({ playoffTeams, playoffStartWeek: 15 }).map(({ playoffRound, week }) => [
+        playoffRound,
+        week,
+      ]),
+    ).toEqual(expected);
   });
 
   it("derives seeds from sorted regular-season standings", () => {

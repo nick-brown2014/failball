@@ -646,6 +646,12 @@ export default function LeaguePage() {
           </section>
         )}
 
+        {!playoffBracket && role !== "COMMISSIONER" && playoffError && (
+          <div className="mt-6 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+            {playoffError}
+          </div>
+        )}
+
         {playoffBracket && (
           <section className="mt-6 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
