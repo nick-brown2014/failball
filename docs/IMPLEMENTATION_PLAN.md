@@ -376,20 +376,35 @@ Failball is a "reverse fantasy football" app where players score points for poor
 
 ## External API Considerations
 
-The app requires integration with an NFL player data API for:
-- Player names, positions, teams
-- Weekly stats (passing, rushing, receiving, etc.)
-- Game schedules and scores
-- Injury status
+### Decision (implemented)
 
-**Recommended APIs to evaluate:**
-- Sleeper API (free, good for fantasy)
-- ESPN API (unofficial)
-- NFL official API
-- SportsData.io (paid)
-- MySportsFeeds (paid)
+No vendor sells the Failball model, so **we derive every scoring category ourselves from play-by-play** (`src/lib/nfl/derive.ts`) instead of buying fantasy stat lines. Raw plays are stored (`PlayEvent`) and stats are re-derived from the full play set on each pass, so mid-game feed corrections and post-game reconciliation are both just a re-derivation.
 
-The schema uses `externalPlayerId` fields to reference players from whichever API is chosen, keeping the database decoupled from any specific provider.
+| Role | Source | Cost |
+|------|--------|------|
+| Primary live PBP (production default) | **SportsData.io** (`NFL_PBP_PROVIDER=sportsdataio`) | paid, live/real-time tier |
+| Alternate live PBP | Sportradar (`sportradar`) | paid |
+| Backfill / local testing / post-game reconciliation | nflverse / nflfastR (`nflverse`) | free |
+| Player metadata, injuries, ADP | Sleeper | free |
+| Charting: `pcDrop` + `pcRouteNotTargeted` **only** | charting vendor (SIS/PFF-style, `NFL_CHARTING_PROVIDER=charting`) | paid, narrow license |
+
+A paid live feed (not free post-game data) is the default because live in-game scoring is a launch requirement — free nflverse PBP only publishes after games. All PBP providers implement one `NflPbpProvider` interface, so the source is swappable by env var and free data can be used in dev/CI without burning paid quota.
+
+**Charting latency caveat:** drops and routes-not-targeted cannot be inferred from a play result, so they are the only fields we license charting for. They stay `0` during a game (scoring treats them as 0 without breaking totals), and `/api/sync/charting` fills them afterwards and flips `PlayerWeekStats.isFinal`. Live scores are therefore near-final, not final, until reconciliation runs.
+
+**Cost implication:** a live-tier PBP subscription plus a narrow two-metric charting license — materially cheaper than a full charted-stats license, at the price of deriving (and owning the correctness of) the model ourselves. `/api/sync/stats?audit=1` re-derives a week from free nflverse data and diffs it against the live-derived rows to keep that honest.
+
+### Pipeline / cadence
+
+- `/api/sync/schedule` — daily, upserts `Game`.
+- `/api/sync/players` — daily, Sleeper metadata + injuries.
+- `/api/sync/live` — every 30–60s during game windows: live plays → `PlayEvent` (idempotent by play id) → derived `PlayerWeekStats` (`isFinal=false`) → matchup/team scores → push.
+- `/api/sync/charting` — post-game, the two charted fields + `isFinal=true`.
+- `/api/sync/stats` — full-week nflverse backfill or audit.
+
+Schedules live in `vercel.json`; all routes are protected by a cron secret (`CRON_SECRET`, `src/lib/cron.ts`) and accept GET (what Vercel Cron sends) as well as POST. Note that sub-daily cron schedules require a paid Vercel plan, and Vercel Cron cannot go below 1/minute — if sub-minute latency matters, run `runLiveSync()` from a long-running worker instead of the route. Score updates are pushed to clients over SSE (`/api/live/stream`, sample subscriber in `src/lib/realtime/useLiveScores.ts`); swap in hosted pub/sub (Pusher/Ably) via `REALTIME_WEBHOOK_URL` if serverless instance affinity becomes a problem.
+
+The schema uses `externalPlayerId` fields to reference players, plus ID-crosswalk columns on `Player` (`gsisId`, `sleeperId`, `sportsDataId`, `chartingId`) so all four sources resolve to one player.
 
 ---
 

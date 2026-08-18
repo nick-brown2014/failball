@@ -564,6 +564,211 @@ model Transaction {
 }
 
 // ============================================
+// NFL Data (players, games, plays, derived stats)
+// ============================================
+
+model Player {
+  id               String    @id @default(cuid())
+  externalPlayerId String    @unique
+  fullName         String
+  position         Position?
+  nflTeam          String?
+  injuryStatus     String?
+  active           Boolean   @default(true)
+
+  // ID crosswalk: one row per real player across every provider we talk to
+  gsisId       String? @unique // nflverse / nflfastR (free PBP backfill)
+  sleeperId    String? @unique // Sleeper (free metadata / injuries / ADP)
+  sportsDataId String? @unique // SportsData.io (paid live PBP, default)
+  chartingId   String? @unique // charting vendor (drops / routes not targeted)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nflTeam])
+  @@map("players")
+}
+
+enum GameStatus {
+  SCHEDULED
+  IN_PROGRESS
+  FINAL
+}
+
+model Game {
+  id             String     @id @default(cuid())
+  externalGameId String     @unique
+  season         Int
+  week           Int
+  homeTeam       String
+  awayTeam       String
+  kickoff        DateTime
+  status         GameStatus @default(SCHEDULED)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  plays PlayEvent[]
+
+  @@index([season, week])
+  @@index([status])
+  @@map("games")
+}
+
+/// Raw per-play rows. Stored verbatim (per provider) so that derived
+/// PlayerWeekStats can be re-computed at any time, and so live ingestion is
+/// idempotent: the same (gameId, externalPlayId) is upserted, never appended.
+model PlayEvent {
+  id              String @id @default(cuid())
+  gameId          String
+  externalPlayId  String
+  season          Int
+  week            Int
+
+  // Situation
+  quarter       Int?
+  clock         String?
+  offenseTeam   String?
+  defenseTeam   String?
+  down          Int?
+  distance      Int?
+  yardLine      Int? // yards from the offense's own goal line (1-99)
+
+  // Outcome
+  playType       String // provider play type, normalized by the adapter
+  result         String? // provider description / result text
+  yardsGained    Int?
+  isTouchdown    Boolean @default(false)
+  isTurnover     Boolean @default(false)
+  isSack         Boolean @default(false)
+  isInterception Boolean @default(false)
+  isFumble       Boolean @default(false)
+  isFumbleLost   Boolean @default(false)
+  isSafety       Boolean @default(false)
+  isPenalty      Boolean @default(false)
+  penaltyFirstDown Boolean @default(false)
+  isNoPlay       Boolean @default(false) // penalty negated / aborted snap
+  isCompletion   Boolean @default(false)
+  // Nullable: null means "the feed does not label targets", which is different
+  // from a labelled throwaway (false). Same reasoning as isScramble.
+  isTarget       Boolean?
+  /// null = provider does not label scrambles (derive.ts infers it)
+  isScramble     Boolean?
+  isKneel        Boolean @default(false)
+  isSpike        Boolean @default(false)
+
+  // Kicking / special teams
+  kickDistance   Int?
+  kickResult     String? // MADE / MISSED / BLOCKED / TOUCHBACK / MUFFED / RECOVERED
+  returnYards    Int?
+
+  // Players involved (external ids from the ingesting provider)
+  passerId    String?
+  rusherId    String?
+  receiverId  String?
+  defenderId  String?
+  kickerId    String?
+  returnerId  String?
+
+  /// Provider payload for fields we do not model yet (laterals, multi-player
+  /// stat lines, replay corrections).
+  raw Json?
+
+  source     String   @default("sportsdataio")
+  ingestedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, externalPlayId])
+  @@index([season, week])
+  @@map("play_events")
+}
+
+/// Derived Failball counts, mapped 1:1 onto LeagueSettings scoring fields.
+/// Everything here is computed from PlayEvent rows by src/lib/nfl/derive.ts,
+/// EXCEPT pcDrop and pcRouteNotTargeted which come from the charting adapter.
+model PlayerWeekStats {
+  id               String @id @default(cuid())
+  externalPlayerId String
+  season           Int
+  week             Int
+  position         Position?
+  nflTeam          String?
+
+  // QB
+  qbIncompletions Int @default(0)
+  qbInterceptions Int @default(0)
+  qbSacks         Int @default(0)
+  qbScrambles     Int @default(0)
+  qbFumbles       Int @default(0)
+  qbTouchdowns    Int @default(0)
+
+  // RB run tiers
+  rbNegativeRuns   Int @default(0)
+  rbNeutralRuns    Int @default(0)
+  rbSuccessfulRuns Int @default(0)
+  rbExplosiveRuns  Int @default(0)
+  rbFumbles        Int @default(0)
+  rbTouchdowns     Int @default(0)
+
+  // Pass catcher tiers
+  pcIncompleteTargets Int @default(0)
+  pcNegativeCatches   Int @default(0)
+  pcNeutralCatches    Int @default(0)
+  pcSuccessfulCatches Int @default(0)
+  pcExplosiveCatches  Int @default(0)
+  pcFumbles           Int @default(0)
+  pcTouchdowns        Int @default(0)
+
+  // Charting-only (not derivable from a play result) - filled by sync/charting
+  pcDrop             Int @default(0)
+  pcRouteNotTargeted Int @default(0)
+
+  // Defense (team unit rows use externalPlayerId = "DEF:<team>")
+  defTouchdownsAllowed    Int @default(0)
+  defFieldGoalsAllowed    Int @default(0)
+  defYardsAllowed         Int @default(0)
+  defYardsAllowedBucket   String? // 0_100 / 100_200 / 200_300 / 300_400 / 400_500 / 500_PLUS
+  defSacks                Int @default(0)
+  defSafeties             Int @default(0)
+  defInterceptions        Int @default(0)
+  defFumbleRecoveries     Int @default(0)
+  defPickSixes            Int @default(0)
+  defFumbleReturnTds      Int @default(0)
+
+  // Special teams (team unit rows use externalPlayerId = "ST:<team>")
+  stMissedExtraPoints     Int @default(0)
+  stMissedFieldGoals      Int @default(0)
+  stMadeFieldGoalsUnder50 Int @default(0)
+  stMadeFieldGoalsOver50  Int @default(0)
+  stKickoffReturnTds      Int @default(0)
+  stKickoffMuffed         Int @default(0)
+  stKickoffStuffed        Int @default(0)
+  stPuntReturnTds         Int @default(0)
+  stPuntMuffed            Int @default(0)
+  stPuntStuffed           Int @default(0)
+  stPuntTouchbacks        Int @default(0)
+  stPuntsBlocked          Int @default(0)
+  stOnsideKickFails       Int @default(0)
+  stPenaltiesExtendDrive  Int @default(0)
+
+  /// "sportsdataio" (live), "nflverse" (backfill), "charting" once reconciled.
+  source        String   @default("sportsdataio")
+  /// false while a game is live; true once charting reconciliation has run.
+  isFinal       Boolean  @default(false)
+  lastUpdatedAt DateTime @default(now()) @updatedAt
+  createdAt     DateTime @default(now())
+
+  // Deliberately no FK to Player: rows also exist for the synthetic team units
+  // (`DEF:<team>` / `ST:<team>`) and for players a charting feed knows about
+  // before the player sync has seen them -- matching the rest of the schema,
+  // which references players by `externalPlayerId` string only.
+  @@unique([externalPlayerId, season, week])
+  @@index([season, week])
+  @@map("player_week_stats")
+}
+
+// ============================================
 // Historical Records
 // ============================================
 
