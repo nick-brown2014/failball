@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-// Mock data - same as src/lib/mockData.ts but with password for seeding
+// Seed users used by local development.
 const mockUsers = [
   {
     id: "user_1",
