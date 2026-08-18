@@ -368,6 +368,7 @@ model Draft {
   currentPick    Int         @default(1)
   secondsPerPick Int         @default(90)
   totalRounds    Int         @default(15)
+  pickDeadline   DateTime?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -399,6 +400,7 @@ model DraftPick {
   round            Int
   pickNumber       Int
   externalPlayerId String
+  isAutopick       Boolean  @default(false)
   pickedAt         DateTime @default(now())
 
   draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)

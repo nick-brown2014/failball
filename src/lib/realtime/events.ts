@@ -11,7 +11,8 @@
  * and the SSE connection are different instances. For that topology set
  * `REALTIME_WEBHOOK_URL` to a hosted pub/sub (Pusher/Ably) ingest endpoint:
  * `publishMatchupScores` will forward there in addition to the local bus, and
- * the browser subscribes to the hosted channel instead of the SSE route.
+ * the browser subscribes to the hosted channel instead of the SSE route. Draft
+ * clients also poll their state so the board stays correct without this bus.
  */
 
 export interface MatchupScoreUpdate {
@@ -33,28 +34,88 @@ export interface LiveScoreEvent {
   matchups: MatchupScoreUpdate[];
 }
 
-type Subscriber = (event: LiveScoreEvent) => void;
+export interface DraftPickUpdate {
+  pickNumber: number;
+  round: number;
+  teamId: string;
+  externalPlayerId: string;
+  autopick: boolean;
+}
 
-const globalForBus = globalThis as unknown as {
-  failballSubscribers?: Set<Subscriber>;
+export interface DraftUpdateEvent {
+  type: "draft-update";
+  leagueId: string;
+  draftId: string;
+  status: string;
+  currentRound: number;
+  currentPick: number;
+  pickDeadline: string | null;
+  pick?: DraftPickUpdate;
+}
+
+type ChannelEvents = {
+  "matchup-scores": LiveScoreEvent;
+  "draft-update": DraftUpdateEvent;
 };
 
-const subscribers: Set<Subscriber> =
-  globalForBus.failballSubscribers ?? new Set<Subscriber>();
+type Subscriber<E> = (event: E) => void;
+
+const globalForBus = globalThis as unknown as {
+  failballSubscribers?: Set<Subscriber<LiveScoreEvent>>;
+  failballDraftSubscribers?: Set<Subscriber<DraftUpdateEvent>>;
+};
+
+const subscribers: Set<Subscriber<LiveScoreEvent>> =
+  globalForBus.failballSubscribers ?? new Set<Subscriber<LiveScoreEvent>>();
 globalForBus.failballSubscribers = subscribers;
 
-export function subscribe(subscriber: Subscriber): () => void {
-  subscribers.add(subscriber);
+const draftSubscribers: Set<Subscriber<DraftUpdateEvent>> =
+  globalForBus.failballDraftSubscribers ??
+  new Set<Subscriber<DraftUpdateEvent>>();
+globalForBus.failballDraftSubscribers = draftSubscribers;
+
+const channelSubscribers: {
+  [K in keyof ChannelEvents]: Set<Subscriber<ChannelEvents[K]>>;
+} = {
+  "matchup-scores": subscribers,
+  "draft-update": draftSubscribers,
+};
+
+export function subscribeChannel<K extends keyof ChannelEvents>(
+  channel: K,
+  subscriber: Subscriber<ChannelEvents[K]>,
+): () => void {
+  channelSubscribers[channel].add(subscriber);
   return () => {
-    subscribers.delete(subscriber);
+    channelSubscribers[channel].delete(subscriber);
   };
 }
 
-export function subscriberCount(): number {
-  return subscribers.size;
+export function subscribe(subscriber: Subscriber<LiveScoreEvent>): () => void {
+  return subscribeChannel("matchup-scores", subscriber);
 }
 
-/** Fan an update out to local SSE subscribers and (optionally) hosted pub/sub. */
+export function subscribeDraft(
+  subscriber: Subscriber<DraftUpdateEvent>,
+): () => void {
+  return subscribeChannel("draft-update", subscriber);
+}
+
+export function subscriberCount(): number {
+  return subscribers.size + draftSubscribers.size;
+}
+
+function notify<E>(channel: Set<Subscriber<E>>, event: E) {
+  for (const subscriber of channel) {
+    try {
+      subscriber(event);
+    } catch {
+      channel.delete(subscriber);
+    }
+  }
+}
+
+/** Fan an update out to local live-score subscribers and hosted pub/sub. */
 export async function publishMatchupScores(
   season: number,
   week: number,
@@ -68,14 +129,7 @@ export async function publishMatchupScores(
     matchups,
   };
 
-  for (const subscriber of subscribers) {
-    try {
-      subscriber(event);
-    } catch {
-      // A broken subscriber must never fail the sync job.
-      subscribers.delete(subscriber);
-    }
-  }
+  notify(subscribers, event);
 
   const webhookUrl = process.env.REALTIME_WEBHOOK_URL;
   if (webhookUrl) {
@@ -98,7 +152,15 @@ export async function publishMatchupScores(
   return event;
 }
 
+export function publishDraftUpdate(
+  event: Omit<DraftUpdateEvent, "type">,
+): DraftUpdateEvent {
+  const update: DraftUpdateEvent = { type: "draft-update", ...event };
+  notify(draftSubscribers, update);
+  return update;
+}
+
 /** Format one event as an SSE frame. */
-export function formatSseFrame(event: LiveScoreEvent): string {
+export function formatSseFrame<E extends { type: string }>(event: E): string {
   return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
 }
