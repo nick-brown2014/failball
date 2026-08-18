@@ -59,28 +59,170 @@ describe.skipIf(!TEST_DATABASE_URL)("lineup snapshot smoke test", () => {
   });
 
   it("seeds and edits a snapshot, and live roster changes do not rewrite it", async () => {
-    const { seedTeamLineup, replaceTeamLineup } = await import("@/lib/lineup/service");
+    const { seedTeamLineup, replaceTeamLineup, syncTeamLineup } = await import("@/lib/lineup/service");
     const { recomputeWeekScores } = await import("@/lib/scoring/updateMatchups");
     const { lockedAssignmentChanges } = await import("@/lib/lineup/locking");
     await seedTeamLineup(teamId, SEASON, 1);
     const before = await prisma.lineupSnapshot.findMany({ where: { teamId, season: SEASON, week: 1 } });
     expect(before).toHaveLength(2);
     const firstScore = (await recomputeWeekScores({ season: SEASON, week: 1, leagueIds: [leagueId], publish: false }))[0].homeScore;
+    const rosterBeforeEdit = await prisma.rosterSlot.findMany({ where: { teamId } });
     await prisma.$transaction(async (tx) => {
       await replaceTeamLineup(teamId, SEASON, 1, before.map((row) => ({
         externalPlayerId: row.externalPlayerId,
         slot: row.externalPlayerId === "RB:SNAP" ? LineupSlot.BENCH : LineupSlot.QB,
-      })), tx);
+      })), rosterBeforeEdit, tx);
     });
     await prisma.rosterSlot.update({ where: { teamId_externalPlayerId: { teamId, externalPlayerId: "QB:SNAP" } }, data: { slotType: SlotType.BENCH } });
     const secondScore = (await recomputeWeekScores({ season: SEASON, week: 1, leagueIds: [leagueId], publish: false }))[0].homeScore;
     expect(secondScore).toBe(firstScore);
     expect((await prisma.lineupSnapshot.findUnique({ where: { teamId_season_week_externalPlayerId: { teamId, season: SEASON, week: 1, externalPlayerId: "QB:SNAP" } } }))?.slot).toBe(LineupSlot.QB);
-    await prisma.game.updateMany({ where: { season: SEASON, week: 1 }, data: { kickoff: new Date("2020-01-01") } });
     expect(lockedAssignmentChanges(
       new Map([["QB:SNAP", LineupSlot.QB]]),
       new Map([["QB:SNAP", LineupSlot.BENCH]]),
       new Set(["QB:SNAP"]),
     )).toEqual(["QB:SNAP"]);
+
+    await prisma.rosterSlot.create({
+      data: {
+        teamId,
+        externalPlayerId: "WR:UPSERT",
+        position: Position.WR,
+        slotType: SlotType.BENCH,
+        acquiredVia: AcquisitionType.WAIVER,
+      },
+    });
+    const rosterAfterAdd = await prisma.rosterSlot.findMany({ where: { teamId } });
+    await prisma.$transaction(async (tx) => {
+      await replaceTeamLineup(
+        teamId,
+        SEASON,
+        1,
+        [
+          ...before.map((snapshot) => ({
+            externalPlayerId: snapshot.externalPlayerId,
+            slot: snapshot.externalPlayerId === "RB:SNAP" ? LineupSlot.BENCH : LineupSlot.QB,
+          })),
+          { externalPlayerId: "WR:UPSERT", slot: LineupSlot.BENCH },
+        ],
+        rosterAfterAdd,
+        tx,
+      );
+    });
+    expect(await prisma.lineupSnapshot.findUnique({
+      where: {
+        teamId_season_week_externalPlayerId: {
+          teamId,
+          season: SEASON,
+          week: 1,
+          externalPlayerId: "WR:UPSERT",
+        },
+      },
+    })).toMatchObject({ position: Position.WR, slot: LineupSlot.BENCH });
+
+    await prisma.rosterSlot.delete({
+      where: { teamId_externalPlayerId: { teamId, externalPlayerId: "WR:UPSERT" } },
+    });
+    await syncTeamLineup(teamId, SEASON, 1);
+    expect(await prisma.lineupSnapshot.findUnique({
+      where: {
+        teamId_season_week_externalPlayerId: {
+          teamId,
+          season: SEASON,
+          week: 1,
+          externalPlayerId: "WR:UPSERT",
+        },
+      },
+    })).toBeNull();
+
+    await prisma.rosterSlot.create({
+      data: {
+        teamId,
+        externalPlayerId: "TE:SYNC",
+        position: Position.TE,
+        slotType: SlotType.BENCH,
+        acquiredVia: AcquisitionType.WAIVER,
+      },
+    });
+    await syncTeamLineup(teamId, SEASON, 1);
+    expect(await prisma.lineupSnapshot.findUnique({
+      where: {
+        teamId_season_week_externalPlayerId: {
+          teamId,
+          season: SEASON,
+          week: 1,
+          externalPlayerId: "TE:SYNC",
+        },
+      },
+    })).toMatchObject({ slot: LineupSlot.BENCH });
+
+    await prisma.rosterSlot.delete({
+      where: { teamId_externalPlayerId: { teamId, externalPlayerId: "RB:SNAP" } },
+    });
+    await syncTeamLineup(teamId, SEASON, 1);
+    expect(await prisma.lineupSnapshot.findUnique({
+      where: {
+        teamId_season_week_externalPlayerId: {
+          teamId,
+          season: SEASON,
+          week: 1,
+          externalPlayerId: "RB:SNAP",
+        },
+      },
+    })).toBeNull();
+
+    await prisma.rosterSlot.create({
+      data: {
+        teamId,
+        externalPlayerId: "ST:KC",
+        position: Position.ST,
+        slotType: SlotType.BENCH,
+        acquiredVia: AcquisitionType.WAIVER,
+      },
+    });
+    await syncTeamLineup(teamId, SEASON, 1);
+    await prisma.game.updateMany({
+      where: { season: SEASON, week: 1 },
+      data: { kickoff: new Date("2020-01-01") },
+    });
+    await prisma.rosterSlot.delete({
+      where: { teamId_externalPlayerId: { teamId, externalPlayerId: "ST:KC" } },
+    });
+    await syncTeamLineup(teamId, SEASON, 1);
+    expect(await prisma.lineupSnapshot.findUnique({
+      where: {
+        teamId_season_week_externalPlayerId: {
+          teamId,
+          season: SEASON,
+          week: 1,
+          externalPlayerId: "ST:KC",
+        },
+      },
+    })).not.toBeNull();
+
+    await prisma.rosterSlot.create({
+      data: {
+        teamId,
+        externalPlayerId: "WR:AFTER",
+        position: Position.WR,
+        slotType: SlotType.BENCH,
+        acquiredVia: AcquisitionType.WAIVER,
+      },
+    });
+    await prisma.matchup.updateMany({
+      where: { leagueId, season: SEASON, week: 1 },
+      data: { isComplete: true },
+    });
+    await syncTeamLineup(teamId, SEASON, 1);
+    expect(await prisma.lineupSnapshot.findUnique({
+      where: {
+        teamId_season_week_externalPlayerId: {
+          teamId,
+          season: SEASON,
+          week: 1,
+          externalPlayerId: "WR:AFTER",
+        },
+      },
+    })).toBeNull();
   });
 });

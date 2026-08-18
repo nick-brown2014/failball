@@ -1,7 +1,7 @@
 import { GameStatus, LineupSlot, Position, SlotType } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import { lockedAssignmentChanges, lockedPlayerIds } from "@/lib/lineup/locking";
-import { seedLineup, validateLineup, type LineupRosterRow } from "@/lib/lineup/logic";
+import { parseWeekParam, seedLineup, validateLineup, type LineupRosterRow } from "@/lib/lineup/logic";
 
 const settings = {
   qbSlots: 1, rbSlots: 1, wrSlots: 1, teSlots: 1, flexSlots: 1,
@@ -83,5 +83,15 @@ describe("lineup locks", () => {
       new Map([["p", LineupSlot.BENCH], ["q", LineupSlot.QB]]),
       new Set(["p"]),
     )).toEqual(["p"]);
+  });
+});
+
+describe("lineup week parsing", () => {
+  it("rejects malformed and out-of-range weeks", () => {
+    expect(parseWeekParam(null, 14)).toEqual({ week: 1 });
+    expect(parseWeekParam("0", 14)).toMatchObject({ code: "INVALID_WEEK" });
+    expect(parseWeekParam("15", 14)).toMatchObject({ code: "INVALID_WEEK" });
+    expect(parseWeekParam("week-two", 14)).toMatchObject({ code: "INVALID_WEEK" });
+    expect(parseWeekParam("2", 14)).toEqual({ week: 2 });
   });
 });

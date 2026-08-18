@@ -172,7 +172,11 @@ export default function TeamRosterPage() {
       const refreshed = await fetch(
         `/api/leagues/${params.id}/teams/${params.teamId}/lineup?week=${week}`,
       );
-      setLineup(await refreshed.json());
+      const refreshedPayload = await refreshed.json();
+      if (!refreshed.ok) {
+        throw new Error(refreshedPayload.error || "Unable to refresh lineup");
+      }
+      setLineup(refreshedPayload);
     } catch (err) {
       setLineupError(err instanceof Error ? err.message : "Unable to save lineup");
     } finally {

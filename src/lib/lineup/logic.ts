@@ -30,6 +30,24 @@ export interface LineupError {
   playerIds: string[];
 }
 
+export function parseWeekParam(
+  raw: string | null,
+  regularSeasonWeeks: number,
+): { week: number } | { code: "INVALID_WEEK"; message: string } {
+  if (raw === null) return { week: 1 };
+  if (!/^\d+$/.test(raw)) {
+    return { code: "INVALID_WEEK", message: "week must be a positive integer" };
+  }
+  const week = Number(raw);
+  if (week < 1 || week > regularSeasonWeeks) {
+    return {
+      code: "INVALID_WEEK",
+      message: `week must be between 1 and ${regularSeasonWeeks}`,
+    };
+  }
+  return { week };
+}
+
 const FIXED_SLOTS: Array<[LineupSlot, Position, keyof LineupSettings]> = [
   [LineupSlot.QB, Position.QB, "qbSlots"],
   [LineupSlot.RB, Position.RB, "rbSlots"],

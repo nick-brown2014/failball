@@ -6,12 +6,13 @@ import prisma from "@/lib/prisma";
 import { getPlayerMap } from "@/lib/players";
 import { lockedAssignmentChanges, lockedPlayerIds } from "@/lib/lineup/locking";
 import {
+  parseWeekParam,
   validateLineup,
   type LineupAssignment,
   type LineupError,
   type LineupRosterRow,
 } from "@/lib/lineup/logic";
-import { replaceTeamLineup, seedTeamLineup } from "@/lib/lineup/service";
+import { replaceTeamLineup, syncTeamLineup } from "@/lib/lineup/service";
 
 const slots = Object.values(LineupSlot);
 
@@ -41,9 +42,11 @@ async function getContext(id: string, teamId: string, email: string) {
   return { user, membership, team };
 }
 
-function weekFrom(request: Request, maxWeek: number): number {
-  const value = Number(new URL(request.url).searchParams.get("week") ?? "1");
-  return Number.isInteger(value) && value > 0 ? Math.min(value, Math.max(maxWeek, 1)) : 1;
+function weekFrom(request: Request, maxWeek: number): number | NextResponse {
+  const parsed = parseWeekParam(new URL(request.url).searchParams.get("week"), maxWeek);
+  return "week" in parsed
+    ? parsed.week
+    : errorResponse(parsed.message, parsed.code, 400);
 }
 
 export async function GET(
@@ -58,7 +61,8 @@ export async function GET(
     if ("response" in context) return context.response;
     const settings = context.team.league.settings;
     const week = weekFrom(request, settings?.regularSeasonWeeks ?? 14);
-    await seedTeamLineup(teamId, context.team.league.season, week);
+    if (typeof week !== "number") return week;
+    await syncTeamLineup(teamId, context.team.league.season, week);
     const [snapshots, matchup, games, playerMap] = await Promise.all([
       prisma.lineupSnapshot.findMany({
         where: { teamId, season: context.team.league.season, week },
@@ -135,9 +139,10 @@ export async function PUT(
         : [];
     const season = context.team.league.season;
     const week = weekFrom(request, context.team.league.settings?.regularSeasonWeeks ?? 14);
+    if (typeof week !== "number") return week;
     const playerMap = await getPlayerMap();
     const result = await prisma.$transaction(async (tx) => {
-      await seedTeamLineup(teamId, season, week, tx);
+      await syncTeamLineup(teamId, season, week, tx);
       const [snapshots, games, matchup] = await Promise.all([
         tx.lineupSnapshot.findMany({ where: { teamId, season, week } }),
         tx.game.findMany({ where: { season, week } }),
@@ -159,14 +164,18 @@ export async function PUT(
           playerIds: snapshots.map((row) => row.externalPlayerId),
         });
       } else {
-        const lockedIds = lockedPlayerIds(snapshots.map((row) => row.externalPlayerId), playerMap, games);
+        const lockedIds = lockedPlayerIds(
+          [...new Set([...snapshots.map((row) => row.externalPlayerId), ...assignments.map((row) => row.externalPlayerId)])],
+          playerMap,
+          games,
+        );
         const changed = lockedAssignmentChanges(current, desired, lockedIds);
         if (changed.length > 0) {
           errors.push({ code: "PLAYER_LOCKED", message: "A kicked-off player's lineup slot cannot change", playerIds: changed });
         }
       }
       if (errors.length > 0) return { errors };
-      await replaceTeamLineup(teamId, season, week, assignments, tx);
+      await replaceTeamLineup(teamId, season, week, assignments, roster, tx);
       return { errors: [] };
     });
     if (result.errors.length > 0) return errorResponse("Lineup could not be saved", "VALIDATION_ERROR", 400, result.errors);
