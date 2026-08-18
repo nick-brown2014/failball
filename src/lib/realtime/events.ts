@@ -11,7 +11,8 @@
  * and the SSE connection are different instances. For that topology set
  * `REALTIME_WEBHOOK_URL` to a hosted pub/sub (Pusher/Ably) ingest endpoint:
  * `publishMatchupScores` will forward there in addition to the local bus, and
- * the browser subscribes to the hosted channel instead of the SSE route.
+ * the browser subscribes to the hosted channel instead of the SSE route. Draft
+ * clients also poll their state so the board stays correct without this bus.
  */
 
 export interface MatchupScoreUpdate {
