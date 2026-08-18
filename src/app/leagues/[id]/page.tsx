@@ -238,6 +238,7 @@ export default function LeaguePage() {
                     <th className="text-center py-3 px-2">T</th>
                     <th className="text-right py-3 px-2">PF</th>
                     <th className="text-right py-3 px-2">PA</th>
+                    <th className="text-right py-3 px-2">Roster</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -276,6 +277,14 @@ export default function LeaguePage() {
                       </td>
                       <td className="py-3 px-2 text-right text-gray-500">
                         {parseFloat(String(team.pointsAgainst)).toFixed(1)}
+                      </td>
+                      <td className="py-3 px-2 text-right">
+                        <Link
+                          href={`/leagues/${league.id}/teams/${team.id}`}
+                          className="text-orange-600 hover:text-orange-500"
+                        >
+                          View
+                        </Link>
                       </td>
                     </tr>
                   ))}

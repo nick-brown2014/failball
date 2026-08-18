@@ -319,8 +319,16 @@ export default function Dashboard() {
                     className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded"
                   >
                     <span className="font-medium">{team.name}</span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {team.league.name}
+                    <span className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {team.league.name}
+                      </span>
+                      <Link
+                        href={`/leagues/${team.league.id}/teams/${team.id}`}
+                        className="text-sm text-orange-600 hover:text-orange-500"
+                      >
+                        Roster
+                      </Link>
                     </span>
                   </li>
                 ))}
