@@ -287,6 +287,7 @@ model Team {
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   roster        RosterSlot[]
+  lineupSnapshots LineupSnapshot[]
   draftPicks    DraftPick[]
   draftOrder    DraftOrder[]
   homeMatchups  Matchup[]      @relation("HomeTeam")
@@ -331,6 +332,34 @@ model RosterSlot {
 
   @@unique([teamId, externalPlayerId])
   @@map("roster_slots")
+}
+
+enum LineupSlot {
+  QB
+  RB
+  WR
+  TE
+  FLEX
+  ST
+  DEF
+  BENCH
+  IR
+}
+
+model LineupSnapshot {
+  id               String    @id @default(cuid())
+  teamId           String
+  season           Int
+  week             Int
+  externalPlayerId String
+  position         Position
+  slot             LineupSlot
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, season, week, externalPlayerId])
+  @@index([teamId, season, week])
+  @@map("lineup_snapshots")
 }
 
 enum AcquisitionType {
