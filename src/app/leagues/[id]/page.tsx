@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Navigation from "@/components/Navigation";
 
 interface LeagueData {
@@ -45,6 +45,36 @@ interface Invite {
   usedCount: number;
 }
 
+interface StandingsRow {
+  teamId: string;
+  name: string;
+  rank: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  user: { id: string; name: string | null; email: string };
+}
+
+interface ScheduleMatchup {
+  id: string;
+  week: number;
+  isComplete: boolean;
+  isPlayoff: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeTeam: { id: string; name: string };
+  awayTeam: { id: string; name: string };
+}
+
+interface ScheduleData {
+  season: number;
+  regularSeasonWeeks: number;
+  weeks: Array<{ week: number; matchups: ScheduleMatchup[] }>;
+  standings: StandingsRow[];
+}
+
 export default function LeaguePage() {
   const params = useParams<{ id: string }>();
   const { status } = useSession();
@@ -57,6 +87,10 @@ export default function LeaguePage() {
   const [errorCode, setErrorCode] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [schedule, setSchedule] = useState<ScheduleData | null>(null);
+  const [scheduleError, setScheduleError] = useState("");
+  const [generatingSchedule, setGeneratingSchedule] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -77,6 +111,46 @@ export default function LeaguePage() {
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [params.id, status]);
+
+  const loadSchedule = useCallback(async () => {
+    const response = await fetch(`/api/leagues/${params.id}/schedule`);
+    const data = await response.json();
+    if (!response.ok) {
+      setScheduleError(data.error || "Unable to load the schedule");
+      return;
+    }
+    setSchedule(data);
+    setSelectedWeek((current) => current ?? data.weeks[0]?.week ?? null);
+  }, [params.id]);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      return;
+    }
+    loadSchedule().catch(() => setScheduleError("Unable to load the schedule"));
+  }, [loadSchedule, status]);
+
+  const generateSchedule = async () => {
+    setScheduleError("");
+    setGeneratingSchedule(true);
+
+    try {
+      const response = await fetch(`/api/leagues/${params.id}/schedule`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setScheduleError(data.error || "Unable to generate the schedule");
+        return;
+      }
+      setSelectedWeek(1);
+      await loadSchedule();
+    } catch {
+      setScheduleError("Unable to generate the schedule");
+    } finally {
+      setGeneratingSchedule(false);
+    }
+  };
 
   const createInvite = async () => {
     setInviteError("");
@@ -161,6 +235,23 @@ export default function LeaguePage() {
       </div>
     );
   }
+
+  const standings: StandingsRow[] =
+    schedule?.standings ??
+    league.teams.map((team, index) => ({
+      teamId: team.id,
+      name: team.name,
+      rank: index + 1,
+      wins: team.wins,
+      losses: team.losses,
+      ties: team.ties,
+      pointsFor: Number(team.pointsFor),
+      pointsAgainst: Number(team.pointsAgainst),
+      user: team.user,
+    }));
+  const weeks = schedule?.weeks ?? [];
+  const activeWeek =
+    weeks.find((week) => week.week === selectedWeek) ?? weeks[0] ?? null;
 
   return (
     <div className="font-sans min-h-screen w-full">
@@ -250,16 +341,16 @@ export default function LeaguePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {league.teams.map((team, index) => (
+                  {standings.map((team) => (
                     <tr
-                      key={team.id}
+                      key={team.teamId}
                       className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 ${
                         team.user.id === userId
                           ? "bg-orange-50 dark:bg-orange-900/20"
                           : ""
                       }`}
                     >
-                      <td className="py-3 px-2 font-medium">{index + 1}</td>
+                      <td className="py-3 px-2 font-medium">{team.rank}</td>
                       <td className="py-3 px-2 font-medium">
                         {team.name}
                         {team.user.id === userId && (
@@ -288,7 +379,7 @@ export default function LeaguePage() {
                       </td>
                       <td className="py-3 px-2 text-right">
                         <Link
-                          href={`/leagues/${league.id}/teams/${team.id}`}
+                          href={`/leagues/${league.id}/teams/${team.teamId}`}
                           className="text-orange-600 hover:text-orange-500"
                         >
                           View
@@ -303,10 +394,84 @@ export default function LeaguePage() {
 
           <div className="space-y-6">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Matchups</h2>
-              <p className="text-gray-600 dark:text-gray-400">
-                Matchups and weekly scores are coming soon.
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <h2 className="text-xl font-semibold">Schedule</h2>
+                {role === "COMMISSIONER" && (
+                  <button
+                    onClick={generateSchedule}
+                    disabled={generatingSchedule}
+                    className="rounded-md border border-orange-600 px-3 py-1 text-sm text-orange-600 hover:bg-orange-50 disabled:opacity-50 dark:hover:bg-gray-700"
+                  >
+                    {generatingSchedule
+                      ? "Generating..."
+                      : weeks.length > 0
+                        ? "Regenerate"
+                        : "Generate"}
+                  </button>
+                )}
+              </div>
+
+              {scheduleError && (
+                <p className="mb-3 text-sm text-red-600 dark:text-red-400">
+                  {scheduleError}
+                </p>
+              )}
+
+              {weeks.length === 0 ? (
+                <p className="text-gray-600 dark:text-gray-400">
+                  No schedule yet.
+                  {role === "COMMISSIONER"
+                    ? " Generate one once the draft is complete."
+                    : " The commissioner has not generated one yet."}
+                </p>
+              ) : (
+                <div>
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {weeks.map((week) => (
+                      <button
+                        key={week.week}
+                        onClick={() => setSelectedWeek(week.week)}
+                        className={`rounded px-2 py-1 text-xs ${
+                          week.week === activeWeek?.week
+                            ? "bg-orange-600 text-white"
+                            : "border border-gray-300 dark:border-gray-600"
+                        }`}
+                      >
+                        {week.week}
+                      </button>
+                    ))}
+                  </div>
+
+                  <ul className="space-y-3 text-sm">
+                    {activeWeek?.matchups.map((matchup) => (
+                      <li
+                        key={matchup.id}
+                        className="rounded border border-gray-200 dark:border-gray-700 p-3"
+                      >
+                        <div className="flex justify-between">
+                          <span>{matchup.awayTeam.name}</span>
+                          <span className="font-medium">
+                            {matchup.awayScore == null
+                              ? "\u2014"
+                              : matchup.awayScore.toFixed(1)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>at {matchup.homeTeam.name}</span>
+                          <span className="font-medium">
+                            {matchup.homeScore == null
+                              ? "\u2014"
+                              : matchup.homeScore.toFixed(1)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {matchup.isComplete ? "Final" : "Not played"}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
