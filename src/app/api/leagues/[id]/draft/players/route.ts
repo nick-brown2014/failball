@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { publishDraftPick } from "@/lib/draft/events";
-import { settleExpiredDraftPicks, compareDraftPlayers } from "@/lib/draft/service";
+import { settleExpiredDraftPicks } from "@/lib/draft/service";
 import { getDraftMember } from "@/lib/draft/state";
 import prisma from "@/lib/prisma";
 
@@ -43,27 +43,48 @@ export async function GET(
       100,
       Math.max(1, Number(request.nextUrl.searchParams.get("limit") ?? 50) || 50),
     );
-    const players = await prisma.player.findMany({
-      where: {
-        active: true,
-        position: { not: null },
-        ...(q
-          ? { fullName: { contains: q, mode: "insensitive" } }
-          : {}),
-        ...(position && Object.values(Position).includes(position as Position)
-          ? { position: position as Position }
-          : {}),
-      },
-      select: {
-        externalPlayerId: true,
-        fullName: true,
-        position: true,
-        nflTeam: true,
-        injuryStatus: true,
-        active: true,
-      },
-    });
-    players.sort(compareDraftPlayers);
+    // PostgreSQL enum ordering is QB, RB, WR, TE, ST, DEF, FLEX, matching DRAFT_POSITION_ORDER.
+    const [players, total] = await Promise.all([
+      prisma.player.findMany({
+        where: {
+          active: true,
+          position: { not: null },
+          ...(q
+            ? { fullName: { contains: q, mode: "insensitive" } }
+            : {}),
+          ...(position && Object.values(Position).includes(position as Position)
+            ? { position: position as Position }
+            : {}),
+        },
+        select: {
+          externalPlayerId: true,
+          fullName: true,
+          position: true,
+          nflTeam: true,
+          injuryStatus: true,
+          active: true,
+        },
+        orderBy: [
+          { position: "asc" },
+          { fullName: "asc" },
+          { externalPlayerId: "asc" },
+        ],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.player.count({
+        where: {
+          active: true,
+          position: { not: null },
+          ...(q
+            ? { fullName: { contains: q, mode: "insensitive" } }
+            : {}),
+          ...(position && Object.values(Position).includes(position as Position)
+            ? { position: position as Position }
+            : {}),
+        },
+      }),
+    ]);
     const draftedIds = new Set(
       draft
         ? (
@@ -74,15 +95,14 @@ export async function GET(
           ).map((pick) => pick.externalPlayerId)
         : [],
     );
-    const start = (page - 1) * limit;
     return NextResponse.json({
-      players: players.slice(start, start + limit).map((player) => ({
+      players: players.map((player) => ({
         ...player,
         drafted: draftedIds.has(player.externalPlayerId),
       })),
       page,
       limit,
-      total: players.length,
+      total,
     });
   } catch (error) {
     console.error("Get draft players error:", error);

@@ -14,6 +14,7 @@ export function publishDraftPick(result: DraftPickResult) {
       round: result.pick.round,
       teamId: result.pick.teamId,
       externalPlayerId: result.pick.externalPlayerId,
+      autopick: result.autopick,
     },
   });
 }

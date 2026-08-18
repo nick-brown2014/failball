@@ -7,7 +7,7 @@ import {
   TransactionStatus,
   TransactionType,
   type Player,
-  type Prisma,
+  type RosterSlot,
 } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { resolveDraftOrder } from "./order";
@@ -58,6 +58,7 @@ export interface DraftPickResult {
   currentRound: number;
   currentPick: number;
   pickDeadline: Date | null;
+  autopick: boolean;
 }
 
 export function compareDraftPlayers(
@@ -80,7 +81,7 @@ export function compareDraftPlayers(
 export function chooseRosterSlot(
   position: Position,
   settings: DraftSettings,
-  roster: Array<Pick<Prisma.RosterSlotGetPayload<{}>, "position" | "slotType">>,
+  roster: Array<Pick<RosterSlot, "position" | "slotType">>,
 ): SlotType {
   const starterCount = roster.filter(
     (slot) => slot.slotType === SlotType.STARTER && slot.position === position,
@@ -163,6 +164,7 @@ export async function makeDraftPick({
   draftId,
   externalPlayerId,
   expectedPick,
+  autopick = false,
 }: PickOptions): Promise<DraftPickResult> {
   return prisma.$transaction(async (tx) => {
     const draft = await tx.draft.findUnique({
@@ -275,7 +277,7 @@ export async function makeDraftPick({
         type: TransactionType.DRAFT,
         status: TransactionStatus.COMPLETED,
         externalPlayerId,
-        action: `Drafted ${player.fullName} at pick ${draft.currentPick}`,
+        action: `${autopick ? "Auto-drafted" : "Drafted"} ${player.fullName} at pick ${draft.currentPick}`,
         week: 0,
         season: draft.league.season,
       },
@@ -299,6 +301,7 @@ export async function makeDraftPick({
       currentRound: isLastPick ? resolution.round : next!.round,
       currentPick: isLastPick ? draft.currentPick : draft.currentPick + 1,
       pickDeadline: deadline,
+      autopick,
     };
   });
 }
@@ -313,9 +316,13 @@ export class DraftServiceError extends Error {
   }
 }
 
+const MAX_AUTOPICKS_PER_SETTLEMENT = 25;
+const AUTOPICK_CANDIDATES_PER_POSITION = 5;
+
 export async function settleExpiredDraftPicks(draftId: string) {
   const results: DraftPickResult[] = [];
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  // Bound one request's work; a later poll can settle any remaining expired picks.
+  for (let attempt = 0; attempt < MAX_AUTOPICKS_PER_SETTLEMENT; attempt += 1) {
     const draft = await prisma.draft.findUnique({
       where: { id: draftId },
       include: {
@@ -333,14 +340,22 @@ export async function settleExpiredDraftPicks(draftId: string) {
       return results;
     }
 
-    const available = await prisma.player.findMany({
-      where: {
-        active: true,
-        position: { not: null },
-        externalPlayerId: { notIn: draft.picks.map((pick) => pick.externalPlayerId) },
-      },
-      select: { externalPlayerId: true, fullName: true, position: true },
-    });
+    const draftedIds = draft.picks.map((pick) => pick.externalPlayerId);
+    const availableByPosition = await Promise.all(
+      DRAFT_POSITION_ORDER.map((position) =>
+        prisma.player.findMany({
+          where: {
+            active: true,
+            position,
+            externalPlayerId: { notIn: draftedIds },
+          },
+          orderBy: [{ fullName: "asc" }, { externalPlayerId: "asc" }],
+          take: AUTOPICK_CANDIDATES_PER_POSITION,
+          select: { externalPlayerId: true, fullName: true, position: true },
+        }),
+      ),
+    );
+    const available = availableByPosition.flat();
     const resolution = resolveDraftOrder(
       draft.currentPick,
       draft.draftOrder.length,
@@ -371,7 +386,11 @@ export async function settleExpiredDraftPicks(draftId: string) {
       if (error instanceof DraftServiceError && error.code === "STALE_PICK") {
         continue;
       }
-      throw error;
+      console.error("Unable to settle expired draft pick", {
+        draftId,
+        error: error instanceof DraftServiceError ? error.code : "INTERNAL_ERROR",
+      });
+      return results;
     }
   }
   return results;

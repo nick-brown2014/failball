@@ -1,15 +1,27 @@
 import { DraftStatus, SlotType, type Position } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { resolveDraftOrder } from "./order";
+import type { DraftLeagueSettings } from "./types";
 
-const starterFields: Record<string, string> = {
-  QB: "qbSlots",
-  RB: "rbSlots",
-  WR: "wrSlots",
-  TE: "teSlots",
-  ST: "stSlots",
-  DEF: "defSlots",
-};
+function starterLimit(settings: DraftLeagueSettings | null, position: Position) {
+  if (!settings) return 0;
+  switch (position) {
+    case "QB":
+      return settings.qbSlots;
+    case "RB":
+      return settings.rbSlots;
+    case "WR":
+      return settings.wrSlots;
+    case "TE":
+      return settings.teSlots;
+    case "ST":
+      return settings.stSlots;
+    case "DEF":
+      return settings.defSlots;
+    default:
+      return 0;
+  }
+}
 
 export async function getDraftMember(leagueId: string, email: string) {
   const user = await prisma.user.findUnique({
@@ -43,7 +55,7 @@ function groupedRoster(
       injuryStatus: string | null;
     } | null;
   }>,
-  settings: Record<string, number> | null,
+  settings: DraftLeagueSettings | null,
 ) {
   const result: Record<string, unknown[]> = {
     QB: [],
@@ -68,7 +80,7 @@ function groupedRoster(
       continue;
     }
     const position = slot.position;
-    const limit = settings?.[starterFields[position]] ?? 0;
+    const limit = starterLimit(settings, position);
     naturalCounts[position] = naturalCounts[position] ?? 0;
     if (naturalCounts[position] < limit) {
       result[position].push(slot);
@@ -172,6 +184,17 @@ export async function getDraftState(leagueId: string, email: string) {
   const rosterPlayersById = new Map(
     rosterPlayers.map((player) => [player.externalPlayerId, player]),
   );
+  const draftTransactions = draft
+    ? await prisma.transaction.findMany({
+        where: { leagueId, type: "DRAFT", externalPlayerId: { in: externalIds } },
+        select: { externalPlayerId: true, action: true },
+      })
+    : [];
+  const autopickedIds = new Set(
+    draftTransactions
+      .filter((transaction) => transaction.action.startsWith("Auto-drafted"))
+      .map((transaction) => transaction.externalPlayerId),
+  );
   const rosterByTeam = new Map<string, typeof rosterSlots>();
   for (const slot of rosterSlots) {
     const current = rosterByTeam.get(slot.teamId) ?? [];
@@ -230,6 +253,7 @@ export async function getDraftState(leagueId: string, email: string) {
         teamId: pick.teamId,
         externalPlayerId: pick.externalPlayerId,
         pickedAt: pick.pickedAt,
+        autopick: autopickedIds.has(pick.externalPlayerId),
         player: playersById.get(pick.externalPlayerId) ?? null,
       })) ?? [],
     callerTeamId: member.team?.id ?? null,

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Navigation from "@/components/Navigation";
 import PlayerDetailPanel from "@/components/draft/PlayerDetailPanel";
+import type { DraftLeagueSettings } from "@/lib/draft/types";
 import { useDraftStream } from "@/lib/realtime/useDraftStream";
 
 type DraftPlayer = {
@@ -22,7 +23,7 @@ type DraftState = {
     name: string;
     season: number;
     maxTeams: number;
-    settings: Record<string, number> | null;
+    settings: DraftLeagueSettings | null;
     teams: Array<{
       id: string;
       name: string;
@@ -58,6 +59,7 @@ type DraftState = {
     externalPlayerId: string;
     pickedAt: string;
     player: DraftPlayer | null;
+    autopick: boolean;
   }>;
   callerTeamId: string | null;
   roster: Record<string, Array<{
@@ -85,10 +87,13 @@ export default function DraftPage() {
   const [selected, setSelected] = useState<DraftPlayer | null>(null);
   const [position, setPosition] = useState("ALL");
   const [query, setQuery] = useState("");
+  const [playerPage, setPlayerPage] = useState(1);
+  const [playerTotal, setPlayerTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [seconds, setSeconds] = useState(0);
+  const expiredDeadline = useRef<string | null>(null);
   const [settings, setSettings] = useState({
     draftType: "SNAKE",
     secondsPerPick: 90,
@@ -124,23 +129,28 @@ export default function DraftPage() {
     void fetchState();
   }, [fetchState]);
 
-  const fetchPlayers = useCallback(async () => {
-    if (state?.draft?.status !== "IN_PROGRESS") return;
+  const fetchPlayers = useCallback(async (page = 1, append = false) => {
+    if (state?.draft?.status !== "IN_PROGRESS" && state?.draft?.status !== "PAUSED") return;
     const search = new URLSearchParams({
       q: query,
       position: position === "ALL" ? "" : position,
       limit: "60",
+      page: String(page),
     });
     const response = await fetch(
       `/api/leagues/${leagueId}/draft/players?${search.toString()}`,
       { cache: "no-store" },
     );
     const data = await response.json();
-    if (response.ok) setPlayers(data.players);
+    if (response.ok) {
+      setPlayers((current) => (append ? [...current, ...data.players] : data.players));
+      setPlayerTotal(data.total);
+    }
   }, [leagueId, position, query, state?.draft?.status]);
 
   useEffect(() => {
-    void fetchPlayers();
+    setPlayerPage(1);
+    void fetchPlayers(1);
   }, [fetchPlayers]);
 
   useEffect(() => {
@@ -150,7 +160,13 @@ export default function DraftPage() {
         ? Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000))
         : 0;
       setSeconds(remaining);
-      if (remaining === 0 && state?.draft?.status === "IN_PROGRESS") {
+      if (
+        remaining === 0 &&
+        deadline &&
+        state?.draft?.status === "IN_PROGRESS" &&
+        expiredDeadline.current !== deadline
+      ) {
+        expiredDeadline.current = deadline;
         void fetchState();
       }
     };
@@ -199,12 +215,13 @@ export default function DraftPage() {
     );
     if (result) {
       setSelected(null);
-      await fetchPlayers();
+      await fetchPlayers(1);
     }
   };
 
   const isCommissioner = state?.member?.role === "COMMISSIONER";
   const isYourTurn =
+    state?.draft?.status === "IN_PROGRESS" &&
     !!state?.callerTeamId &&
     !!state.onClock &&
     state.callerTeamId === state.onClock.teamId;
@@ -212,11 +229,10 @@ export default function DraftPage() {
     const settingsData = state?.league?.settings;
     if (!settingsData) return [];
     const rows: Array<{ label: string; key: string }> = [];
-    for (const positionKey of ["QB", "RB", "WR", "TE"]) {
-      for (let i = 0; i < (settingsData[`${positionKey.toLowerCase()}Slots`] ?? 0); i += 1) {
-        rows.push({ label: positionKey, key: positionKey });
-      }
-    }
+    for (let i = 0; i < settingsData.qbSlots; i += 1) rows.push({ label: "QB", key: "QB" });
+    for (let i = 0; i < settingsData.rbSlots; i += 1) rows.push({ label: "RB", key: "RB" });
+    for (let i = 0; i < settingsData.wrSlots; i += 1) rows.push({ label: "WR", key: "WR" });
+    for (let i = 0; i < settingsData.teSlots; i += 1) rows.push({ label: "TE", key: "TE" });
     for (let i = 0; i < (settingsData.flexSlots ?? 0); i += 1) rows.push({ label: "FLEX", key: "FLEX" });
     for (let i = 0; i < (settingsData.stSlots ?? 0); i += 1) rows.push({ label: "ST", key: "ST" });
     for (let i = 0; i < (settingsData.defSlots ?? 0); i += 1) rows.push({ label: "DEF", key: "DEF" });
@@ -277,6 +293,12 @@ export default function DraftPage() {
           <CompletedBoard state={state} />
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr_1fr]">
+            {state.draft.status === "PAUSED" && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 lg:col-span-3">
+                <div className="font-semibold">Draft paused</div>
+                <div className="mt-1 text-sm">Pick actions are disabled until the commissioner resumes the draft.</div>
+              </div>
+            )}
             <section className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Available players</h2>
@@ -315,6 +337,18 @@ export default function DraftPage() {
                   </button>
                 ))}
               </div>
+              {players.length < playerTotal && (
+                <button
+                  onClick={() => {
+                    const nextPage = playerPage + 1;
+                    setPlayerPage(nextPage);
+                    void fetchPlayers(nextPage, true);
+                  }}
+                  className="mt-3 w-full rounded border border-gray-300 px-3 py-2 text-sm hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700"
+                >
+                  Load more
+                </button>
+              )}
             </section>
 
             <section className="space-y-6">
@@ -326,19 +360,28 @@ export default function DraftPage() {
                 </p>
                 <div className="my-4 text-5xl font-black tabular-nums text-orange-300">{seconds}s</div>
                 <button
-                  disabled={!isYourTurn || !selected || busy}
+                  disabled={!isYourTurn || !selected || busy || state.draft.status === "PAUSED"}
                   onClick={makePick}
                   className="w-full rounded bg-orange-600 px-4 py-3 font-bold hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {isYourTurn ? (selected ? `Draft ${selected.fullName}` : "Select a player") : "Waiting for your turn"}
                 </button>
-                {isCommissioner && (
+                {isCommissioner && state.draft.status === "IN_PROGRESS" && (
                   <button
                     disabled={busy}
                     onClick={() => draftAction("pause")}
                     className="mt-3 rounded border border-gray-500 px-3 py-2 text-sm hover:bg-gray-800 disabled:opacity-50"
                   >
                     Pause draft
+                  </button>
+                )}
+                {isCommissioner && state.draft.status === "PAUSED" && (
+                  <button
+                    disabled={busy}
+                    onClick={() => draftAction("resume")}
+                    className="mt-3 rounded bg-orange-600 px-3 py-2 text-sm font-semibold hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    Resume draft
                   </button>
                 )}
               </div>
@@ -348,7 +391,7 @@ export default function DraftPage() {
                   {state.picks.slice(-10).reverse().map((pick) => (
                     <div key={pick.id} className="flex justify-between gap-3 border-b border-gray-100 pb-2 text-sm dark:border-gray-700">
                       <span>#{pick.pickNumber} · {state.order.find((entry) => entry.teamId === pick.teamId)?.teamName || "Team"}</span>
-                      <span className="font-medium">{pick.player?.fullName || pick.externalPlayerId}</span>
+                      <span className="font-medium">{pick.player?.fullName || pick.externalPlayerId}{pick.autopick ? " (Auto)" : ""}</span>
                     </div>
                   ))}
                   {state.picks.length === 0 && <p className="text-sm text-gray-500">No picks yet.</p>}
@@ -462,7 +505,7 @@ function CompletedBoard({ state }: { state: DraftState }) {
           {state.picks.map((pick) => (
             <div key={pick.id} className="rounded border border-gray-200 p-3 text-sm dark:border-gray-700">
               <div className="text-xs text-gray-500">Round {pick.round} · Pick {pick.pickNumber}</div>
-              <div className="mt-1 font-semibold">{pick.player?.fullName || pick.externalPlayerId}</div>
+              <div className="mt-1 font-semibold">{pick.player?.fullName || pick.externalPlayerId}{pick.autopick ? " (Auto)" : ""}</div>
               <div className="text-xs text-gray-500">{state.order.find((entry) => entry.teamId === pick.teamId)?.teamName}</div>
             </div>
           ))}

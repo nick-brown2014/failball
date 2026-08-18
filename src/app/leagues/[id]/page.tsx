@@ -179,36 +179,30 @@ export default function LeaguePage() {
               Season {league.season} &bull; {league.maxTeams} Teams
             </p>
           </div>
-          {role === "COMMISSIONER" && (
-            <div className="flex gap-2">
-              <Link
-                href={`/leagues/${league.id}/draft`}
-                className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
-              >
-                Draft Room
-              </Link>
-              <Link
-                href={`/leagues/${league.id}/settings`}
-                className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
-              >
-                Settings
-              </Link>
-              <button
-                onClick={createInvite}
-                className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700"
-              >
-                Invite
-              </button>
-            </div>
-          )}
-          {role !== "COMMISSIONER" && (
+          <div className="flex gap-2">
             <Link
               href={`/leagues/${league.id}/draft`}
               className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
             >
               Draft Room
             </Link>
-          )}
+            {role === "COMMISSIONER" && (
+              <div className="flex gap-2">
+                <Link
+                  href={`/leagues/${league.id}/settings`}
+                  className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+                >
+                  Settings
+                </Link>
+                <button
+                  onClick={createInvite}
+                  className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700"
+                >
+                  Invite
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {inviteError && (

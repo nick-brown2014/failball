@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DraftUpdateEvent } from "./events";
 
 export function useDraftStream(
   leagueId: string,
@@ -13,8 +12,7 @@ export function useDraftStream(
     const source = new EventSource(`/api/leagues/${leagueId}/draft/stream`);
     source.onopen = () => setConnected(true);
     source.onerror = () => setConnected(false);
-    source.addEventListener("draft-update", (event) => {
-      JSON.parse((event as MessageEvent).data) as DraftUpdateEvent;
+    source.addEventListener("draft-update", () => {
       onRefresh();
     });
 

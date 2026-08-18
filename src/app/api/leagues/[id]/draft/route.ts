@@ -1,11 +1,15 @@
-import { DraftStatus, DraftType } from "@prisma/client";
+import { DraftStatus, DraftType, type Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { publishDraftPick, publishDraftState } from "@/lib/draft/events";
 import { getDraftMember, getDraftState } from "@/lib/draft/state";
-import { settleExpiredDraftPicks } from "@/lib/draft/service";
+import {
+  DraftServiceError,
+  settleExpiredDraftPicks,
+} from "@/lib/draft/service";
+import { shuffleDraftOrder } from "@/lib/draft/order";
 
 async function requireMember(leagueId: string, email: string) {
   const member = await getDraftMember(leagueId, email);
@@ -20,15 +24,24 @@ async function requireMember(leagueId: string, email: string) {
 }
 
 function errorResponse(error: unknown, fallback = "An error occurred") {
-  const code =
-    error && typeof error === "object" && "code" in error
-      ? String(error.code)
-      : "INTERNAL_ERROR";
+  if (error instanceof DraftServiceError) {
+    const status = DRAFT_ERROR_STATUS[error.code] ?? 400;
+    return NextResponse.json({ error: error.message, code: error.code }, { status });
+  }
   return NextResponse.json(
-    { error: error instanceof Error ? error.message : fallback, code },
-    { status: code === "INTERNAL_ERROR" ? 500 : 400 },
+    { error: fallback, code: "INTERNAL_ERROR" },
+    { status: 500 },
   );
 }
+
+const DRAFT_ERROR_STATUS: Record<string, number> = {
+  DRAFT_NOT_IN_PROGRESS: 400,
+  INVALID_DRAFT_ORDER: 400,
+  PLAYER_NOT_DRAFTABLE: 400,
+  PLAYER_ALREADY_DRAFTED: 409,
+  ROSTER_FULL: 400,
+  STALE_PICK: 409,
+};
 
 export async function GET(
   _request: NextRequest,
@@ -92,6 +105,12 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
+    if (body.draftType !== undefined && body.draftType !== "SNAKE" && body.draftType !== "LINEAR") {
+      return NextResponse.json(
+        { error: "draftType must be SNAKE or LINEAR", code: "VALIDATION_ERROR" },
+        { status: 400 },
+      );
+    }
     const draftType = body.draftType === "LINEAR" ? DraftType.LINEAR : DraftType.SNAKE;
     const secondsPerPick = Number(body.secondsPerPick ?? 90);
     const totalRounds = Number(body.totalRounds ?? 15);
@@ -120,6 +139,22 @@ export async function POST(
         { status: 400 },
       );
     }
+    const league = await prisma.league.findUnique({
+      where: { id },
+      select: { settings: { select: { rosterSize: true } } },
+    });
+    if (!league?.settings) {
+      return NextResponse.json(
+        { error: "League settings are required before creating a draft", code: "VALIDATION_ERROR" },
+        { status: 400 },
+      );
+    }
+    if (totalRounds > league.settings.rosterSize) {
+      return NextResponse.json(
+        { error: `totalRounds cannot exceed rosterSize (${league.settings.rosterSize})`, code: "VALIDATION_ERROR" },
+        { status: 400 },
+      );
+    }
 
     const existing = await prisma.draft.findFirst({ where: { leagueId: id } });
     if (existing) {
@@ -137,7 +172,7 @@ export async function POST(
       );
     }
 
-    const shuffled = [...teams].sort(() => Math.random() - 0.5);
+    const shuffled = shuffleDraftOrder(teams);
     const draft = await prisma.$transaction(async (tx) => {
       const created = await tx.draft.create({
         data: {
@@ -207,7 +242,7 @@ export async function PATCH(
       const teamIds =
         action === "set-order"
           ? body.teamIds
-          : draft.league.teams.map((team) => team.id).sort(() => Math.random() - 0.5);
+          : shuffleDraftOrder(draft.league.teams.map((team) => team.id));
       if (
         !Array.isArray(teamIds) ||
         teamIds.length !== draft.league.teams.length ||
@@ -236,11 +271,58 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      const data: Record<string, unknown> = {};
-      if (body.draftType === "SNAKE" || body.draftType === "LINEAR") data.draftType = body.draftType;
-      if (Number.isInteger(body.secondsPerPick) && body.secondsPerPick >= 5 && body.secondsPerPick <= 3600) data.secondsPerPick = body.secondsPerPick;
-      if (Number.isInteger(body.totalRounds) && body.totalRounds >= 1 && body.totalRounds <= 50) data.totalRounds = body.totalRounds;
-      if ("scheduledAt" in body) data.scheduledAt = body.scheduledAt ? new Date(String(body.scheduledAt)) : null;
+      const data: Prisma.DraftUpdateInput = {};
+      if ("draftType" in body) {
+        if (body.draftType !== "SNAKE" && body.draftType !== "LINEAR") {
+          return NextResponse.json(
+            { error: "draftType must be SNAKE or LINEAR", code: "VALIDATION_ERROR" },
+            { status: 400 },
+          );
+        }
+        data.draftType = body.draftType;
+      }
+      if ("secondsPerPick" in body) {
+        if (!Number.isInteger(body.secondsPerPick) || body.secondsPerPick < 5 || body.secondsPerPick > 3600) {
+          return NextResponse.json(
+            { error: "secondsPerPick must be an integer from 5 to 3600", code: "VALIDATION_ERROR" },
+            { status: 400 },
+          );
+        }
+        data.secondsPerPick = body.secondsPerPick;
+      }
+      if ("totalRounds" in body) {
+        if (!Number.isInteger(body.totalRounds) || body.totalRounds < 1 || body.totalRounds > 50) {
+          return NextResponse.json(
+            { error: "totalRounds must be an integer from 1 to 50", code: "VALIDATION_ERROR" },
+            { status: 400 },
+          );
+        }
+        const settings = await prisma.leagueSettings.findUnique({
+          where: { leagueId: id },
+          select: { rosterSize: true },
+        });
+        if (!settings || body.totalRounds > settings.rosterSize) {
+          return NextResponse.json(
+            { error: `totalRounds cannot exceed rosterSize (${settings?.rosterSize ?? "unknown"})`, code: "VALIDATION_ERROR" },
+            { status: 400 },
+          );
+        }
+        data.totalRounds = body.totalRounds;
+      }
+      if ("scheduledAt" in body) {
+        if (body.scheduledAt === null || body.scheduledAt === "") {
+          data.scheduledAt = null;
+        } else {
+          const scheduledAt = new Date(String(body.scheduledAt));
+          if (Number.isNaN(scheduledAt.getTime())) {
+            return NextResponse.json(
+              { error: "scheduledAt must be a valid date", code: "VALIDATION_ERROR" },
+              { status: 400 },
+            );
+          }
+          data.scheduledAt = scheduledAt;
+        }
+      }
       await prisma.draft.update({ where: { id: draft.id }, data });
     } else if (action === "start") {
       if (draft.status !== DraftStatus.SCHEDULED) {

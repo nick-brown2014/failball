@@ -12,19 +12,24 @@ import { getDraftMember } from "@/lib/draft/state";
 import prisma from "@/lib/prisma";
 
 function responseForError(error: unknown) {
-  const code =
-    error instanceof DraftServiceError
-      ? error.code
-      : error && typeof error === "object" && "code" in error
-        ? String(error.code)
-        : "INTERNAL_ERROR";
-  const status =
-    code === "INTERNAL_ERROR" ? 500 : code === "STALE_PICK" ? 409 : 400;
+  if (error instanceof DraftServiceError) {
+    const status = DRAFT_ERROR_STATUS[error.code] ?? 400;
+    return NextResponse.json({ error: error.message, code: error.code }, { status });
+  }
   return NextResponse.json(
-    { error: error instanceof Error ? error.message : "Unable to make pick", code },
-    { status },
+    { error: "Unable to make pick", code: "INTERNAL_ERROR" },
+    { status: 500 },
   );
 }
+
+const DRAFT_ERROR_STATUS: Record<string, number> = {
+  DRAFT_NOT_IN_PROGRESS: 400,
+  INVALID_DRAFT_ORDER: 400,
+  PLAYER_NOT_DRAFTABLE: 400,
+  PLAYER_ALREADY_DRAFTED: 409,
+  ROSTER_FULL: 400,
+  STALE_PICK: 409,
+};
 
 export async function POST(
   request: NextRequest,
