@@ -63,6 +63,17 @@ interface SportsDataPlayStat {
   KickoffTouchbacks?: number;
   PuntReturns?: number;
   KickReturns?: number;
+  PassingYards?: number;
+  RushingYards?: number;
+  ReceivingYards?: number;
+  KickoffYards?: number;
+  PuntYards?: number;
+  PuntReturnYards?: number;
+  KickReturnYards?: number;
+  PassingSackYards?: number;
+  SackYards?: number;
+  InterceptionReturnYards?: number;
+  FumbleReturnYards?: number;
   PassingTouchdowns?: number;
   RushingTouchdowns?: number;
   ReceivingTouchdowns?: number;
@@ -249,18 +260,57 @@ export function normalizePlay(
   const playType = mapPlayType(play.Type);
   const text = description.toLowerCase();
 
-  const passerId = statOwner(stats, (s) => (s.PassingAttempts ?? 0) > 0 || (s.PassingSacks ?? 0) > 0);
-  const rusherId = statOwner(stats, (s) => (s.RushingAttempts ?? 0) > 0);
-  const receiverId = statOwner(stats, (s) => (s.ReceivingTargets ?? 0) > 0);
+  // Attribution accepts either the attempt counters or a non-zero yardage
+  // column for the same role: trial/limited subscriptions populate yardage but
+  // zero out every attempt counter, which would otherwise leave each play
+  // without a passer/rusher/receiver and derive only team-unit rows.
+  const passerId = statOwner(
+    stats,
+    (s) =>
+      (s.PassingAttempts ?? 0) > 0 ||
+      (s.PassingSacks ?? 0) > 0 ||
+      (s.PassingInterceptions ?? 0) > 0 ||
+      (s.PassingYards ?? 0) !== 0 ||
+      (s.PassingSackYards ?? 0) !== 0,
+  );
+  const rusherId = statOwner(
+    stats,
+    (s) => (s.RushingAttempts ?? 0) > 0 || (s.RushingYards ?? 0) !== 0,
+  );
+  const receiverId = statOwner(
+    stats,
+    (s) =>
+      (s.ReceivingTargets ?? 0) > 0 ||
+      (s.Receptions ?? 0) > 0 ||
+      (s.ReceivingYards ?? 0) !== 0,
+  );
   const defenderId = statOwner(
     stats,
-    (s) => (s.Sacks ?? 0) > 0 || (s.Interceptions ?? 0) > 0 || (s.FumblesRecovered ?? 0) > 0,
+    (s) =>
+      (s.Sacks ?? 0) > 0 ||
+      (s.Interceptions ?? 0) > 0 ||
+      (s.FumblesRecovered ?? 0) > 0 ||
+      (s.SackYards ?? 0) !== 0 ||
+      (s.InterceptionReturnYards ?? 0) !== 0 ||
+      (s.FumbleReturnYards ?? 0) !== 0,
   );
   const kickerId = statOwner(
     stats,
-    (s) => (s.FieldGoalsAttempted ?? 0) > 0 || (s.ExtraPointsAttempted ?? 0) > 0,
+    (s) =>
+      (s.FieldGoalsAttempted ?? 0) > 0 ||
+      (s.ExtraPointsAttempted ?? 0) > 0 ||
+      (s.FieldGoalsYards ?? 0) > 0 ||
+      (s.KickoffYards ?? 0) !== 0 ||
+      (s.PuntYards ?? 0) !== 0,
   );
-  const returnerId = statOwner(stats, (s) => (s.KickReturns ?? 0) > 0 || (s.PuntReturns ?? 0) > 0);
+  const returnerId = statOwner(
+    stats,
+    (s) =>
+      (s.KickReturns ?? 0) > 0 ||
+      (s.PuntReturns ?? 0) > 0 ||
+      (s.KickReturnYards ?? 0) !== 0 ||
+      (s.PuntReturnYards ?? 0) !== 0,
+  );
 
   const isInterception =
     stats.some((s) => (s.PassingInterceptions ?? 0) > 0) ||
