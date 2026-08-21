@@ -380,6 +380,12 @@ export default function LeaguePage() {
             >
               Waivers
             </Link>
+            <Link
+              href={`/leagues/${league.id}/trades`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Trades
+            </Link>
             {role === "COMMISSIONER" && (
               <div className="flex gap-2">
                 <Link
