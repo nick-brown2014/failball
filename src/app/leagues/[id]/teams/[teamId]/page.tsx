@@ -39,7 +39,27 @@ interface RosterResponse {
   };
 }
 
+interface LineupPlayer {
+  id: string;
+  externalPlayerId: string;
+  position: string;
+  slot: string;
+  locked: boolean;
+  player: Player | null;
+}
+
+interface LineupResponse {
+  week: number;
+  season: number;
+  canEdit: boolean;
+  weekLocked: boolean;
+  settings: { regularSeasonWeeks?: number } | null;
+  slots: LineupPlayer[];
+  bySlot: Record<string, LineupPlayer[]>;
+}
+
 const POSITIONS = ["QB", "RB", "WR", "TE", "ST", "DEF"];
+const LINEUP_SLOTS = ["QB", "RB", "WR", "TE", "FLEX", "ST", "DEF", "BENCH", "IR"];
 
 const SECTIONS: Array<{ slotType: string; title: string }> = [
   { slotType: "STARTER", title: "Starters" },
@@ -64,6 +84,10 @@ export default function TeamRosterPage() {
   const [data, setData] = useState<RosterResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [week, setWeek] = useState(1);
+  const [lineup, setLineup] = useState<LineupResponse | null>(null);
+  const [lineupError, setLineupError] = useState("");
+  const [savingLineup, setSavingLineup] = useState(false);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -85,6 +109,80 @@ export default function TeamRosterPage() {
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [params.id, params.teamId]);
+
+  useEffect(() => {
+    setLineup(null);
+    setLineupError("");
+    fetch(`/api/leagues/${params.id}/teams/${params.teamId}/lineup?week=${week}`)
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Unable to load lineup");
+        setLineup(payload);
+      })
+      .catch((err: Error) => setLineupError(err.message));
+  }, [params.id, params.teamId, week]);
+
+  const updateLineupSlot = (externalPlayerId: string, slot: string) => {
+    if (!lineup || !lineup.canEdit || lineup.weekLocked) return;
+    setLineup({
+      ...lineup,
+      slots: lineup.slots.map((player) =>
+        player.externalPlayerId === externalPlayerId ? { ...player, slot } : player,
+      ),
+      bySlot: Object.fromEntries(
+        LINEUP_SLOTS.map((name) => [
+          name,
+          lineup.slots
+            .map((player) =>
+              player.externalPlayerId === externalPlayerId ? { ...player, slot } : player,
+            )
+            .filter((player) => player.slot === name),
+        ]),
+      ),
+    });
+  };
+
+  const saveLineup = async () => {
+    if (!lineup) return;
+    setSavingLineup(true);
+    setLineupError("");
+    try {
+      const response = await fetch(
+        `/api/leagues/${params.id}/teams/${params.teamId}/lineup?week=${week}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assignments: lineup.slots.map((player) => ({
+              externalPlayerId: player.externalPlayerId,
+              slot: player.slot,
+            })),
+          }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        const details = (payload.errors ?? [])
+          .map((item: { message: string; playerIds?: string[] }) =>
+            `${item.message}${item.playerIds?.length ? ` (${item.playerIds.join(", ")})` : ""}`,
+          )
+          .join("; ");
+        throw new Error(details || payload.error || "Unable to save lineup");
+      }
+      const refreshed = await fetch(
+        `/api/leagues/${params.id}/teams/${params.teamId}/lineup?week=${week}`,
+      );
+      const refreshedPayload = await refreshed.json();
+      if (!refreshed.ok) {
+        throw new Error(refreshedPayload.error || "Unable to refresh lineup");
+      }
+      setLineup(refreshedPayload);
+    } catch (err) {
+      setLineupError(err instanceof Error ? err.message : "Unable to save lineup");
+    } finally {
+      setSavingLineup(false);
+    }
+  };
 
   const runSearch = useCallback(async () => {
     setSearching(true);
@@ -178,6 +276,83 @@ export default function TeamRosterPage() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
+            <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">Weekly Lineup</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Past-week lineups are snapshots and do not change with roster moves.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="lineup-week" className="text-sm font-medium">Week</label>
+                  <select
+                    id="lineup-week"
+                    value={week}
+                    onChange={(event) => setWeek(Number(event.target.value))}
+                    className="rounded-md border border-gray-300 px-2 py-1 dark:border-gray-600 dark:bg-gray-700"
+                  >
+                    {Array.from({ length: lineup?.settings?.regularSeasonWeeks ?? 14 }, (_, index) => index + 1).map(
+                      (value) => <option key={value} value={value}>{value}</option>,
+                    )}
+                  </select>
+                </div>
+              </div>
+              {lineup?.weekLocked && (
+                <div className="mb-4 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  This week is locked because the matchup is complete.
+                </div>
+              )}
+              {lineupError && (
+                <div className="mb-4 rounded-md bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/40 dark:text-red-200">
+                  {lineupError}
+                </div>
+              )}
+              {!lineup ? (
+                <p className="text-sm text-gray-500">Loading lineup...</p>
+              ) : (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {LINEUP_SLOTS.map((slotName) => (
+                      <div key={slotName} className="rounded-md border p-3 dark:border-gray-700">
+                        <h3 className="mb-2 text-sm font-semibold">{slotName}</h3>
+                        {(lineup.bySlot[slotName] ?? []).length === 0 ? (
+                          <p className="text-xs text-gray-500">Empty</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {(lineup.bySlot[slotName] ?? []).map((player) => (
+                              <div key={player.externalPlayerId} className="flex items-center gap-2 text-sm">
+                                <span className="min-w-0 flex-1 truncate">
+                                  {player.player?.fullName ?? player.externalPlayerId}
+                                </span>
+                                {player.locked && <span title="Locked" aria-label="Locked">🔒</span>}
+                                <select
+                                  value={player.slot}
+                                  disabled={!lineup.canEdit || lineup.weekLocked || player.locked}
+                                  onChange={(event) => updateLineupSlot(player.externalPlayerId, event.target.value)}
+                                  className="w-24 rounded border border-gray-300 px-1 py-1 text-xs dark:border-gray-600 dark:bg-gray-700"
+                                >
+                                  {LINEUP_SLOTS.map((value) => <option key={value} value={value}>{value}</option>)}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {lineup.canEdit && !lineup.weekLocked && (
+                    <button
+                      onClick={saveLineup}
+                      disabled={savingLineup}
+                      className="mt-4 rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      {savingLineup ? "Saving..." : "Save Lineup"}
+                    </button>
+                  )}
+                </>
+              )}
+            </section>
             {SECTIONS.map((section) => {
               const slots = roster.bySlotType[section.slotType] ?? [];
 

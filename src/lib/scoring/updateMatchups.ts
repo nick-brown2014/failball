@@ -10,8 +10,9 @@
  * `derive.ts` (`DEF:<team>` / `ST:<team>`).
  */
 
-import { Prisma, SlotType } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { isStartingSlot, seedLineupsForTeams } from "@/lib/lineup/service";
 import {
   publishMatchupScores,
   type MatchupScoreUpdate,
@@ -34,19 +35,24 @@ export async function recomputeWeekScores(options: {
     },
     include: {
       league: { include: { settings: true } },
-      homeTeam: { include: { roster: true } },
-      awayTeam: { include: { roster: true } },
+      homeTeam: { select: { id: true } },
+      awayTeam: { select: { id: true } },
     },
   });
   if (matchups.length === 0) return [];
 
+  const teamIds = [
+    ...new Set(matchups.flatMap((matchup) => [matchup.homeTeam.id, matchup.awayTeam.id])),
+  ];
+  await seedLineupsForTeams(teamIds, season, week);
+  const snapshots = await prisma.lineupSnapshot.findMany({
+    where: { teamId: { in: teamIds }, season, week },
+  });
   const rosterPlayerIds = [
     ...new Set(
-      matchups.flatMap((matchup) =>
-        [...matchup.homeTeam.roster, ...matchup.awayTeam.roster]
-          .filter((slot) => slot.slotType === SlotType.STARTER)
-          .map((slot) => slot.externalPlayerId),
-      ),
+      snapshots
+        .filter((slot) => isStartingSlot(slot.slot))
+        .map((slot) => slot.externalPlayerId),
     ),
   ];
 
@@ -63,18 +69,18 @@ export async function recomputeWeekScores(options: {
     const settings = matchup.league.settings;
     if (!settings) continue;
 
-    const scoreFor = (roster: { externalPlayerId: string; slotType: SlotType }[]) =>
+    const scoreFor = (teamId: string) =>
       roundPoints(
-        roster
-          .filter((slot) => slot.slotType === SlotType.STARTER)
+        snapshots
+          .filter((slot) => slot.teamId === teamId && isStartingSlot(slot.slot))
           .reduce((sum, slot) => {
             const stats = statsByPlayerId.get(slot.externalPlayerId);
             return stats ? sum + computeScore(stats, settings) : sum;
           }, 0),
       );
 
-    const homeScore = scoreFor(matchup.homeTeam.roster);
-    const awayScore = scoreFor(matchup.awayTeam.roster);
+    const homeScore = scoreFor(matchup.homeTeam.id);
+    const awayScore = scoreFor(matchup.awayTeam.id);
 
     await prisma.matchup.update({
       where: { id: matchup.id },
@@ -96,10 +102,10 @@ export async function recomputeWeekScores(options: {
     });
   }
 
-  const teamIds = [
+  const affectedTeamIds = [
     ...new Set(updates.flatMap((update) => [update.homeTeamId, update.awayTeamId])),
   ];
-  await recomputeTeamTotals(season, teamIds);
+  await recomputeTeamTotals(season, affectedTeamIds);
 
   if (publish && updates.length > 0) {
     await publishMatchupScores(season, week, updates);
