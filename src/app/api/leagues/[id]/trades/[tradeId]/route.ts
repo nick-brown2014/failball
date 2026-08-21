@@ -16,7 +16,6 @@ import {
   VETO_VOTE_PLAYER_ID,
   validateTradePlayerSets,
 } from "@/lib/trades/logic";
-import { getPlayerMap } from "@/lib/players";
 import { currentWeek } from "@/lib/schedule/currentWeek";
 import {
   addPlayerToRoster,
@@ -179,7 +178,6 @@ async function completeTrade(
       externalPlayerId: player.externalPlayerId,
       acquiredVia: AcquisitionType.TRADE,
       position: slot.position,
-      slotType: slot.slotType,
     });
     await logTransaction({
       tx,
@@ -187,7 +185,11 @@ async function completeTrade(
       teamId: destinationTeamId,
       type: TransactionType.TRADE,
       externalPlayerId: player.externalPlayerId,
-      action: `Traded player from ${player.teamId}`,
+      action: `Acquired via trade from ${
+        player.teamId === trade.proposingTeamId
+          ? trade.proposingTeam.name
+          : trade.receivingTeam.name
+      }`,
       week,
       season: league.season,
       relatedTradeId: trade.id,
@@ -248,7 +250,6 @@ async function reverseTrade(
       externalPlayerId: player.externalPlayerId,
       acquiredVia: AcquisitionType.TRADE,
       position: slot.position,
-      slotType: slot.slotType,
     });
     await logTransaction({
       tx,
@@ -257,7 +258,11 @@ async function reverseTrade(
       type: TransactionType.TRADE,
       status: TransactionStatus.REVERSED,
       externalPlayerId: player.externalPlayerId,
-      action: `Reversed trade ${trade.id}`,
+      action: `Returned to ${
+        originalOwner === trade.proposingTeamId
+          ? trade.proposingTeam.name
+          : trade.receivingTeam.name
+      } after vetoed trade`,
       week,
       season: league.season,
       relatedTradeId: trade.id,
@@ -388,7 +393,7 @@ async function handleTradeAction(
         403,
       );
     }
-    if (action === "reject" && (!isReceivingOwner || existing.status !== TradeStatus.PENDING) && !isCommissioner) {
+    if (action === "reject" && !isReceivingOwner && !isCommissioner) {
       return errorResponse(
         "Only the receiving team owner or commissioner may reject this trade",
         "FORBIDDEN",
@@ -617,6 +622,11 @@ async function handleTradeAction(
           409,
         );
       }
+      const league = await tx.league.findUniqueOrThrow({
+        where: { id },
+        select: { season: true },
+      });
+      const week = await currentWeek(tx, id, league.season);
       await tx.transaction.create({
         data: {
           leagueId: id,
@@ -627,18 +637,8 @@ async function handleTradeAction(
           action: "VETO_VOTE",
           notes: `Veto vote by ${member.user.name ?? member.user.email}`,
           relatedTradeId: trade.id,
-          week: await currentWeek(
-            tx,
-            id,
-            (await tx.league.findUniqueOrThrow({
-              where: { id },
-              select: { season: true },
-            })).season,
-          ),
-          season: (await tx.league.findUniqueOrThrow({
-            where: { id },
-            select: { season: true },
-          })).season,
+          week,
+          season: league.season,
         },
       });
       const votes = await tx.transaction.findMany({

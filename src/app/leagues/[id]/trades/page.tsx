@@ -39,10 +39,7 @@ interface TradeResponse {
 }
 
 function teamPlayers(trade: Trade, teamId: string) {
-  return trade.players
-    .filter((player) => player.teamId === teamId)
-    .map((player) => player.playerName)
-    .join(", ") || "No players";
+  return trade.players.filter((player) => player.teamId === teamId);
 }
 
 function ownerName(owner: { name: string | null; email: string }) {
@@ -100,23 +97,6 @@ export default function TradesPage() {
     } finally {
       setBusy(null);
     }
-  };
-
-  const counter = async (trade: Trade) => {
-    const send = window.prompt(
-      "Player IDs to send from your team (comma separated)",
-      "",
-    );
-    if (send === null) return;
-    const receive = window.prompt(
-      "Player IDs to receive from the other team (comma separated)",
-      "",
-    );
-    if (receive === null) return;
-    await performAction(trade, "counter", {
-      sendPlayerIds: send.split(",").map((id) => id.trim()).filter(Boolean),
-      receivePlayerIds: receive.split(",").map((id) => id.trim()).filter(Boolean),
-    });
   };
 
   if (loading) {
@@ -182,6 +162,8 @@ export default function TradesPage() {
                     trade.receivingTeamId !== data.viewer.teamId &&
                     (trade.status === "PENDING" || trade.status === "COMPLETED");
                   const pending = trade.status === "PENDING";
+                  const proposingPlayers = teamPlayers(trade, trade.proposingTeamId);
+                  const receivingPlayers = teamPlayers(trade, trade.receivingTeamId);
                   return (
                     <article key={trade.id} className="rounded-lg bg-white p-5 shadow dark:bg-gray-800">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -200,11 +182,37 @@ export default function TradesPage() {
                       <div className="mt-4 grid gap-3 md:grid-cols-2">
                         <div className="rounded-md bg-orange-50 p-3 dark:bg-orange-900/20">
                           <p className="text-xs font-semibold uppercase text-gray-500">From {trade.proposingTeam.name}</p>
-                          <p className="mt-1">{teamPlayers(trade, trade.proposingTeamId)}</p>
+                          <p className="mt-1">
+                            {proposingPlayers.length === 0 ? (
+                              "No players"
+                            ) : (
+                              proposingPlayers.map((player, index) => (
+                                <span key={player.externalPlayerId}>
+                                  {index > 0 && ", "}
+                                  <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
+                                    {player.playerName}
+                                  </Link>
+                                </span>
+                              ))
+                            )}
+                          </p>
                         </div>
                         <div className="rounded-md bg-blue-50 p-3 dark:bg-blue-900/20">
                           <p className="text-xs font-semibold uppercase text-gray-500">From {trade.receivingTeam.name}</p>
-                          <p className="mt-1">{teamPlayers(trade, trade.receivingTeamId)}</p>
+                          <p className="mt-1">
+                            {receivingPlayers.length === 0 ? (
+                              "No players"
+                            ) : (
+                              receivingPlayers.map((player, index) => (
+                                <span key={player.externalPlayerId}>
+                                  {index > 0 && ", "}
+                                  <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
+                                    {player.playerName}
+                                  </Link>
+                                </span>
+                              ))
+                            )}
+                          </p>
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
@@ -219,7 +227,7 @@ export default function TradesPage() {
                               {busy === `${trade.id}:accept` ? "Accepting..." : "Accept"}
                             </button>
                             <button onClick={() => void performAction(trade, "reject")} disabled={busy !== null} className="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50">Reject</button>
-                            <button onClick={() => void counter(trade)} disabled={busy !== null} className="rounded-md border border-orange-600 px-3 py-1.5 text-sm text-orange-600 disabled:opacity-50">Counter</button>
+                            <Link href={`/leagues/${params.id}/trades/new?counterTradeId=${trade.id}`} className="rounded-md border border-orange-600 px-3 py-1.5 text-sm text-orange-600">Counter</Link>
                           </>
                         )}
                         {canVeto && (
