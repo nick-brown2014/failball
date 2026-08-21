@@ -356,6 +356,18 @@ export default function LeaguePage() {
             >
               Draft Room
             </Link>
+            <Link
+              href={`/leagues/${league.id}/matchups`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Matchups
+            </Link>
+            <Link
+              href={`/leagues/${league.id}/standings`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Standings
+            </Link>
             {role === "COMMISSIONER" && (
               <div className="flex gap-2">
                 <Link
