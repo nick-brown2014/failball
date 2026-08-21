@@ -375,7 +375,7 @@ export default function LeaguePage() {
               Season {league.season} &bull; {league.maxTeams} Teams
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href={`/leagues/${league.id}/draft`}
               className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
@@ -417,6 +417,12 @@ export default function LeaguePage() {
               className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
             >
               Trades
+            </Link>
+            <Link
+              href={`/leagues/${league.id}/history`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              History
             </Link>
             {role === "COMMISSIONER" && (
               <div className="flex gap-2">
