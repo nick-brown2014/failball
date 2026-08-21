@@ -271,7 +271,11 @@ export default function FreeAgentsPage() {
             {players.map((player) => (
               <li key={player.externalPlayerId} className="flex items-center justify-between gap-4 py-3">
                 <div className="min-w-0">
-                  <p className="font-medium">{player.fullName}</p>
+                  <p className="font-medium">
+                    <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
+                      {player.fullName}
+                    </Link>
+                  </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {player.position} &bull; {player.nflTeam || "FA"}
                   </p>
