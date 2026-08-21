@@ -374,6 +374,12 @@ export default function LeaguePage() {
             >
               Free Agents
             </Link>
+            <Link
+              href={`/leagues/${league.id}/waivers`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Waivers
+            </Link>
             {role === "COMMISSIONER" && (
               <div className="flex gap-2">
                 <Link
