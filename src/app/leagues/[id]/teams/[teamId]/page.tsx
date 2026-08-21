@@ -33,6 +33,7 @@ interface RosterResponse {
     league: { id: string; name: string; season: number };
   };
   isOwner: boolean;
+  role: string;
   roster: {
     bySlotType: Record<string, RosterSlot[]>;
     counts: { total: number; starters: number; bench: number; ir: number };
@@ -84,6 +85,8 @@ export default function TeamRosterPage() {
   const [data, setData] = useState<RosterResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [rosterActionError, setRosterActionError] = useState("");
+  const [rosterBusy, setRosterBusy] = useState<string | null>(null);
   const [week, setWeek] = useState(1);
   const [lineup, setLineup] = useState<LineupResponse | null>(null);
   const [lineupError, setLineupError] = useState("");
@@ -97,18 +100,23 @@ export default function TeamRosterPage() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
 
+  const loadRoster = useCallback(async () => {
+    const response = await fetch(
+      `/api/leagues/${params.id}/teams/${params.teamId}/roster`,
+      { cache: "no-store" },
+    );
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to load roster");
+    }
+    setData(payload);
+  }, [params.id, params.teamId]);
+
   useEffect(() => {
-    fetch(`/api/leagues/${params.id}/teams/${params.teamId}/roster`)
-      .then(async (response) => {
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.error || "Unable to load roster");
-        }
-        setData(payload);
-      })
+    void loadRoster()
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [params.id, params.teamId]);
+  }, [loadRoster]);
 
   useEffect(() => {
     setLineup(null);
@@ -181,6 +189,31 @@ export default function TeamRosterPage() {
       setLineupError(err instanceof Error ? err.message : "Unable to save lineup");
     } finally {
       setSavingLineup(false);
+    }
+  };
+
+  const dropPlayer = async (externalPlayerId: string, name: string) => {
+    if (!window.confirm(`Drop ${name} from this roster?`)) return;
+    setRosterBusy(externalPlayerId);
+    setRosterActionError("");
+    try {
+      const response = await fetch(
+        `/api/leagues/${params.id}/teams/${params.teamId}/transactions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dropPlayerId: externalPlayerId }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to drop player");
+      }
+      await loadRoster();
+    } catch (err) {
+      setRosterActionError(err instanceof Error ? err.message : "Unable to drop player");
+    } finally {
+      setRosterBusy(null);
     }
   };
 
@@ -276,6 +309,11 @@ export default function TeamRosterPage() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
+            {rosterActionError && (
+              <div className="rounded-md bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/40 dark:text-red-200">
+                {rosterActionError}
+              </div>
+            )}
             <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -385,6 +423,9 @@ export default function TeamRosterPage() {
                             <th className="px-2 py-3 text-left">Pos</th>
                             <th className="px-2 py-3 text-left">NFL Team</th>
                             <th className="px-2 py-3 text-left">Status</th>
+                            {(data.isOwner || data.role === "COMMISSIONER") && (
+                              <th className="px-2 py-3 text-right">Action</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -418,6 +459,22 @@ export default function TeamRosterPage() {
                                   status={slot.player?.injuryStatus ?? null}
                                 />
                               </td>
+                              {(data.isOwner || data.role === "COMMISSIONER") && (
+                                <td className="px-2 py-3 text-right">
+                                  <button
+                                    onClick={() =>
+                                      void dropPlayer(
+                                        slot.externalPlayerId,
+                                        slot.player?.fullName ?? slot.externalPlayerId,
+                                      )
+                                    }
+                                    disabled={rosterBusy === slot.externalPlayerId}
+                                    className="rounded-md border border-red-600 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
+                                  >
+                                    {rosterBusy === slot.externalPlayerId ? "Dropping..." : "Drop"}
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
