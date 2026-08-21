@@ -323,7 +323,11 @@ export default function TeamRosterPage() {
                             {(lineup.bySlot[slotName] ?? []).map((player) => (
                               <div key={player.externalPlayerId} className="flex items-center gap-2 text-sm">
                                 <span className="min-w-0 flex-1 truncate">
-                                  {player.player?.fullName ?? player.externalPlayerId}
+                                  {player.player ? (
+                                    <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
+                                      {player.player.fullName}
+                                    </Link>
+                                  ) : player.externalPlayerId}
                                 </span>
                                 {player.locked && <span title="Locked" aria-label="Locked">🔒</span>}
                                 <select
@@ -393,7 +397,11 @@ export default function TeamRosterPage() {
                                 {slot.position}
                               </td>
                               <td className="px-2 py-3">
-                                {slot.player?.fullName || (
+                                {slot.player ? (
+                                  <Link href={`/players/${slot.externalPlayerId}`} className="hover:text-orange-600">
+                                    {slot.player.fullName}
+                                  </Link>
+                                ) : (
                                   <span className="text-gray-500">
                                     Unknown player ({slot.externalPlayerId})
                                   </span>
