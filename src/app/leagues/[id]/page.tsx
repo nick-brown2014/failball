@@ -426,6 +426,12 @@ export default function LeaguePage() {
                 >
                   Settings
                 </Link>
+                <Link
+                  href={`/leagues/${league.id}/commissioner`}
+                  className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+                >
+                  Commissioner
+                </Link>
                 <button
                   onClick={createInvite}
                   className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700"
