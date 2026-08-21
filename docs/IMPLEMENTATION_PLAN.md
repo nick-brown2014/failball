@@ -73,7 +73,7 @@ Failball is a "reverse fantasy football" app where players score points for poor
 4. **League dashboard**
    - View all leagues user belongs to
    - League standings
-   - Recent activity feed
+   - Recent activity feed (implemented) — `/api/leagues/[id]/transactions` feeds the league page preview and the full feed at `/leagues/[id]/activity`, with per-team history at `/api/leagues/[id]/teams/[teamId]/transactions`
 
 ### Database Models Used
 - League, LeagueMembership, LeagueInvite, LeagueSettings
@@ -97,10 +97,10 @@ Failball is a "reverse fantasy football" app where players score points for poor
    - Starter/bench/IR slot management
    - Position eligibility validation
 
-3. **Player search and details**
+3. **Player search and details** (implemented)
    - Integrate with external NFL API
    - Player search functionality
-   - Player detail pages with stats
+   - Player detail pages with stats — `/players/[externalPlayerId]` and `/api/players/[externalPlayerId]`, with weekly Failball scoring and league ownership history (`src/lib/playerHistory.ts`)
 
 4. **Lineup management**
    - Set weekly lineup
@@ -197,6 +197,8 @@ Failball is a "reverse fantasy football" app where players score points for poor
 
 **Goal**: Team-to-team player trades with league oversight
 
+**Status**: Implemented — `/api/leagues/[id]/trades` (propose, accept, reject, counter, veto vote), `/leagues/[id]/trades`, `/leagues/[id]/trades/new`, `src/lib/trades/`. Trade deadline (`LeagueSettings.tradeDeadlineWeek`) and league-wide veto voting are enforced; execution is atomic and writes `Transaction` rows. Expiry is enforced when a trade is acted on rather than by a background sweep. Deferred: email/push notifications — proposals surface in-app and in the activity feed.
+
 ### Tasks
 
 1. **Trade proposal**
@@ -228,6 +230,8 @@ Failball is a "reverse fantasy football" app where players score points for poor
 ## Phase 7: Waivers & Free Agency
 
 **Goal**: Waiver wire and free agent acquisition system
+
+**Status**: Implemented — `/api/leagues/[id]/free-agents` (instant add/drop), `/api/leagues/[id]/waivers` (claims + FAAB bids), `/api/leagues/[id]/waivers/process`, scheduled processing via `/api/sync/waivers` on `LeagueSettings.waiverProcessDay`, UI at `/leagues/[id]/free-agents` and `/leagues/[id]/waivers`, logic in `src/lib/waivers/process.ts` and `src/lib/roster/mutate.ts`. Both priority and FAAB resolution are supported with roster-limit enforcement.
 
 ### Tasks
 
@@ -265,6 +269,8 @@ Failball is a "reverse fantasy football" app where players score points for poor
 
 **Goal**: League management capabilities for commissioners
 
+**Status**: Implemented — `/leagues/[id]/commissioner` plus `/api/leagues/[id]/commissioner/*` (force add/drop, reverse transactions, force/veto/reverse trades, remove members, transfer the commissioner role) on top of the existing settings page. Draft pause/resume remains handled by the draft route (`POST /api/leagues/[id]/draft`, `action: "pause" | "resume"`). Deferred: a league-wide roster lock switch — lineups already lock at kickoff, and no schema field exists for a manual lock.
+
 ### Tasks
 
 1. **League settings management**
@@ -297,6 +303,8 @@ Failball is a "reverse fantasy football" app where players score points for poor
 ## Phase 9: Historical Data & Records
 
 **Goal**: Track and display historical league data
+
+**Status**: Implemented — `/api/leagues/[id]/season/archive` snapshots a finished season into `SeasonRecord` (final rank, record, points, playoff placement derived from the bracket; commissioner or cron secret; idempotent via `force=1`), and `/leagues/[id]/history` shows champions by season, all-time team records, head-to-head records, and a per-season transaction summary. Deferred: career stats aggregated per user across leagues, and highest/lowest single-week score records.
 
 ### Tasks
 
