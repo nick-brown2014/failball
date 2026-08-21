@@ -18,12 +18,16 @@ interface RosterSlot {
   player: Player | null;
 }
 
-interface LeagueResponse {
+interface LeaguePayload {
   userId: string;
-  teams: Array<{ id: string; name: string; user: { id: string } }>;
+  error?: string;
+  league: {
+    teams: Array<{ id: string; name: string; user: { id: string } }>;
+  };
 }
 
-interface RosterResponse {
+interface RosterPayload {
+  error?: string;
   roster: { slots: RosterSlot[]; counts: { total: number } };
 }
 
@@ -65,7 +69,7 @@ export default function FreeAgentsPage() {
       `/api/leagues/${leagueId}/teams/${nextTeamId}/roster`,
       { cache: "no-store" },
     );
-    const payload = await response.json();
+    const payload = (await response.json()) as RosterPayload;
     if (!response.ok) throw new Error(payload.error || "Unable to load roster");
     setRoster(payload.roster.slots);
     setRosterCount(payload.roster.counts.total);
@@ -76,10 +80,11 @@ export default function FreeAgentsPage() {
     const loadLeague = async () => {
       try {
         const response = await fetch(`/api/leagues/${leagueId}`, { cache: "no-store" });
-        const payload = await response.json();
+        const payload = (await response.json()) as LeaguePayload;
         if (!response.ok) throw new Error(payload.error || "Unable to load league");
         const ownTeam = payload.league.teams.find(
-          (team: LeagueResponse["teams"][number]) => team.user.id === payload.userId,
+          (team: LeaguePayload["league"]["teams"][number]) =>
+            team.user.id === payload.userId,
         );
         if (!ownTeam) throw new Error("You do not have a team in this league");
         if (cancelled) return;

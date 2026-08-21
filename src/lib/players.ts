@@ -134,10 +134,9 @@ export async function searchPlayers({
   const all = await getPlayers();
   const needle = q?.trim().toLowerCase();
   const filterPosition = toRosterablePosition(position);
-  const excluded = excludePlayerIds;
 
   const matches = all.filter((player) => {
-    if (excluded?.has(player.externalPlayerId)) return false;
+    if (excludePlayerIds?.has(player.externalPlayerId)) return false;
     if (filterPosition && player.position !== filterPosition) return false;
     if (needle && !player.fullName.toLowerCase().includes(needle)) return false;
     return true;

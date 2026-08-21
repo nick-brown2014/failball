@@ -28,7 +28,7 @@ export async function POST(
 
     if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "You must be logged in to view this roster", code: "UNAUTHORIZED" },
+        { error: "You must be logged in to manage this roster", code: "UNAUTHORIZED" },
         { status: 401 },
       );
     }
@@ -111,7 +111,6 @@ export async function POST(
     const result = await prisma.$transaction(async (tx) => {
       const week = await currentWeek(tx, id, team.league.season);
       let droppedExternalPlayerId: string | null = null;
-      let addedExternalPlayerId: string | null = null;
       let added: Awaited<ReturnType<typeof addPlayerToRoster>> | null = null;
 
       if (addPlayerId) {
@@ -137,7 +136,6 @@ export async function POST(
         added = dropPlayerId
           ? await addDropPlayer({ ...addArgs, dropExternalPlayerId: dropPlayerId })
           : await addPlayerToRoster(addArgs);
-        addedExternalPlayerId = addPlayerId;
         droppedExternalPlayerId = dropPlayerId ?? null;
       } else if (dropPlayerId) {
         await dropPlayerFromRoster({
@@ -167,7 +165,7 @@ export async function POST(
           leagueId: id,
           teamId,
           type: TransactionType.FREE_AGENT,
-          externalPlayerId: addedExternalPlayerId!,
+          externalPlayerId: added.externalPlayerId,
           action: "Added free agent",
           week,
           season: team.league.season,
