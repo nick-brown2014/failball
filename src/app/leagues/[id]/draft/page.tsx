@@ -323,24 +323,29 @@ export default function DraftPage() {
               </div>
               <div className="max-h-[560px] space-y-1 overflow-y-auto">
                 {players.map((player) => (
-                  <button
+                  <div
                     key={player.externalPlayerId}
-                    disabled={player.drafted}
-                    onClick={() => setSelected(player)}
                     className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm ${player.drafted ? "cursor-not-allowed opacity-35 line-through" : selected?.externalPlayerId === player.externalPlayerId ? "bg-orange-100 dark:bg-orange-900/40" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
                   >
-                    <span>
-                      <Link
-                        href={`/players/${player.externalPlayerId}`}
-                        onClick={(event) => event.stopPropagation()}
-                        className="font-medium hover:text-orange-600"
-                      >
-                        {player.fullName}
-                      </Link>
-                      <span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
-                    </span>
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">{player.position}</span>
-                  </button>
+                    <button
+                      disabled={player.drafted}
+                      onClick={() => setSelected(player)}
+                      className="flex min-w-0 flex-1 items-center justify-between text-left"
+                    >
+                      <span>
+                        <span className="font-medium">{player.fullName}</span>
+                        <span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
+                      </span>
+                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">{player.position}</span>
+                    </button>
+                    <Link
+                      href={`/players/${player.externalPlayerId}`}
+                      aria-label={`View ${player.fullName} profile`}
+                      className="ml-3 shrink-0 text-xs text-orange-600 hover:text-orange-500"
+                    >
+                      Profile
+                    </Link>
+                  </div>
                 ))}
               </div>
               {players.length < playerTotal && (
