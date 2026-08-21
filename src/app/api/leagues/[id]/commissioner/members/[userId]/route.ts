@@ -4,6 +4,17 @@ import { commissionerError, getCommissioner } from "@/lib/commissioner/guard";
 import { decideMemberRemoval } from "@/lib/commissioner/logic";
 import prisma from "@/lib/prisma";
 
+class MemberActionError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "MemberActionError";
+  }
+}
+
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string; userId: string }> },
@@ -46,15 +57,5 @@ export async function DELETE(
       "INTERNAL_ERROR",
       500,
     );
-  }
-}
-
-class MemberActionError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly status: number,
-  ) {
-    super(message);
   }
 }

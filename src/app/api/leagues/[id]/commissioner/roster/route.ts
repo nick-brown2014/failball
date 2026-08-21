@@ -30,6 +30,7 @@ class CommissionerRosterError extends Error {
     public readonly status: number,
   ) {
     super(message);
+    this.name = "CommissionerRosterError";
   }
 }
 
