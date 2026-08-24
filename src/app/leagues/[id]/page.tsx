@@ -5,6 +5,11 @@ import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import Navigation from "@/components/Navigation";
+import {
+  ACTIVITY_TYPE_LABELS,
+  groupActivity,
+  type ActivityTransaction,
+} from "@/lib/transactions/describe";
 
 interface LeagueData {
   id: string;
@@ -124,6 +129,8 @@ export default function LeaguePage() {
   const [playoffTeams, setPlayoffTeams] = useState(6);
   const [playoffError, setPlayoffError] = useState("");
   const [generatingPlayoffs, setGeneratingPlayoffs] = useState(false);
+  const [activity, setActivity] = useState<ActivityTransaction[]>([]);
+  const [activityError, setActivityError] = useState("");
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -181,6 +188,24 @@ export default function LeaguePage() {
     }
     loadPlayoffs().catch(() => setPlayoffError("Unable to load the playoffs"));
   }, [loadPlayoffs, status]);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      return;
+    }
+
+    fetch(`/api/leagues/${params.id}/transactions?limit=10`, {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to load recent activity");
+        }
+        setActivity(data.transactions as ActivityTransaction[]);
+      })
+      .catch((err: Error) => setActivityError(err.message));
+  }, [params.id, status]);
 
   const generateSchedule = async () => {
     setScheduleError("");
@@ -324,6 +349,7 @@ export default function LeaguePage() {
   const weeks = schedule?.weeks ?? [];
   const activeWeek =
     weeks.find((week) => week.week === selectedWeek) ?? weeks[0] ?? null;
+  const recentActivity = groupActivity(activity).slice(0, 5);
   const myTeam = league.teams.find((team) => team.user.id === userId);
   const myMatchup = myTeam
     ? activeWeek?.matchups.find(
@@ -349,7 +375,7 @@ export default function LeaguePage() {
               Season {league.season} &bull; {league.maxTeams} Teams
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href={`/leagues/${league.id}/draft`}
               className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
@@ -368,6 +394,36 @@ export default function LeaguePage() {
             >
               Standings
             </Link>
+            <Link
+              href={`/leagues/${league.id}/free-agents`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Free Agents
+            </Link>
+            <Link
+              href={`/leagues/${league.id}/waivers`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Waivers
+            </Link>
+            <Link
+              href={`/leagues/${league.id}/activity`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Activity
+            </Link>
+            <Link
+              href={`/leagues/${league.id}/trades`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              Trades
+            </Link>
+            <Link
+              href={`/leagues/${league.id}/history`}
+              className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+            >
+              History
+            </Link>
             {role === "COMMISSIONER" && (
               <div className="flex gap-2">
                 <Link
@@ -375,6 +431,12 @@ export default function LeaguePage() {
                   className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
                 >
                   Settings
+                </Link>
+                <Link
+                  href={`/leagues/${league.id}/commissioner`}
+                  className="px-4 py-2 border border-orange-600 text-orange-600 rounded-md hover:bg-orange-50 dark:hover:bg-gray-700"
+                >
+                  Commissioner
                 </Link>
                 <button
                   onClick={createInvite}
@@ -614,6 +676,44 @@ export default function LeaguePage() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <h2 className="text-xl font-semibold">Recent Activity</h2>
+                <Link
+                  href={`/leagues/${league.id}/activity`}
+                  className="text-sm text-orange-600 hover:text-orange-500"
+                >
+                  View all
+                </Link>
+              </div>
+              {activityError ? (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {activityError}
+                </p>
+              ) : recentActivity.length === 0 ? (
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  No transactions yet.
+                </p>
+              ) : (
+                <ul className="space-y-3 text-sm">
+                  {recentActivity.map((group) => (
+                    <li key={group.key}>
+                      <p>{group.description}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {ACTIVITY_TYPE_LABELS[group.type]}
+                        {group.week > 0 ? ` \u2022 Week ${group.week}` : ""}
+                        {" \u2022 "}
+                        {new Date(group.processedAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">

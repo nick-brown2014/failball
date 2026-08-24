@@ -323,18 +323,29 @@ export default function DraftPage() {
               </div>
               <div className="max-h-[560px] space-y-1 overflow-y-auto">
                 {players.map((player) => (
-                  <button
+                  <div
                     key={player.externalPlayerId}
-                    disabled={player.drafted}
-                    onClick={() => setSelected(player)}
                     className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm ${player.drafted ? "cursor-not-allowed opacity-35 line-through" : selected?.externalPlayerId === player.externalPlayerId ? "bg-orange-100 dark:bg-orange-900/40" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
                   >
-                    <span>
-                      <span className="font-medium">{player.fullName}</span>
-                      <span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
-                    </span>
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">{player.position}</span>
-                  </button>
+                    <button
+                      disabled={player.drafted}
+                      onClick={() => setSelected(player)}
+                      className="flex min-w-0 flex-1 items-center justify-between text-left"
+                    >
+                      <span>
+                        <span className="font-medium">{player.fullName}</span>
+                        <span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
+                      </span>
+                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">{player.position}</span>
+                    </button>
+                    <Link
+                      href={`/players/${player.externalPlayerId}`}
+                      aria-label={`View ${player.fullName} profile`}
+                      className="ml-3 shrink-0 text-xs text-orange-600 hover:text-orange-500"
+                    >
+                      Profile
+                    </Link>
+                  </div>
                 ))}
               </div>
               {players.length < playerTotal && (
@@ -391,7 +402,14 @@ export default function DraftPage() {
                   {state.picks.slice(-10).reverse().map((pick) => (
                     <div key={pick.id} className="flex justify-between gap-3 border-b border-gray-100 pb-2 text-sm dark:border-gray-700">
                       <span>#{pick.pickNumber} · {state.order.find((entry) => entry.teamId === pick.teamId)?.teamName || "Team"}</span>
-                      <span className="font-medium">{pick.player?.fullName || pick.externalPlayerId}{pick.autopick ? " (Auto)" : ""}</span>
+                      <span className="font-medium">
+                        {pick.player ? (
+                          <Link href={`/players/${pick.externalPlayerId}`} className="hover:text-orange-600">
+                            {pick.player.fullName}
+                          </Link>
+                        ) : pick.externalPlayerId}
+                        {pick.autopick ? " (Auto)" : ""}
+                      </span>
                     </div>
                   ))}
                   {state.picks.length === 0 && <p className="text-sm text-gray-500">No picks yet.</p>}
@@ -409,7 +427,13 @@ export default function DraftPage() {
                     return (
                       <div key={`${row.label}-${index}`} className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm dark:border-gray-700">
                         <span className="w-14 text-xs font-semibold text-gray-500">{row.label}</span>
-                        <span className={player ? "font-medium" : "text-gray-400"}>{player?.fullName || "Empty slot"}</span>
+                        <span className={player ? "font-medium" : "text-gray-400"}>
+                          {player ? (
+                            <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
+                              {player.fullName}
+                            </Link>
+                          ) : "Empty slot"}
+                        </span>
                       </div>
                     );
                   })}
@@ -505,7 +529,14 @@ function CompletedBoard({ state }: { state: DraftState }) {
           {state.picks.map((pick) => (
             <div key={pick.id} className="rounded border border-gray-200 p-3 text-sm dark:border-gray-700">
               <div className="text-xs text-gray-500">Round {pick.round} · Pick {pick.pickNumber}</div>
-              <div className="mt-1 font-semibold">{pick.player?.fullName || pick.externalPlayerId}{pick.autopick ? " (Auto)" : ""}</div>
+              <div className="mt-1 font-semibold">
+                {pick.player ? (
+                  <Link href={`/players/${pick.externalPlayerId}`} className="hover:text-orange-600">
+                    {pick.player.fullName}
+                  </Link>
+                ) : pick.externalPlayerId}
+                {pick.autopick ? " (Auto)" : ""}
+              </div>
               <div className="text-xs text-gray-500">{state.order.find((entry) => entry.teamId === pick.teamId)?.teamName}</div>
             </div>
           ))}
@@ -523,7 +554,13 @@ function CompletedBoard({ state }: { state: DraftState }) {
                 <p className="mb-2 text-xs text-gray-500">{team.user.name || team.user.email}</p>
                 <ul className="space-y-1 text-sm">
                   {players.map((slot) => (
-                    <li key={slot.externalPlayerId}>{slot.player?.fullName || slot.externalPlayerId}</li>
+                    <li key={slot.externalPlayerId}>
+                      {slot.player ? (
+                        <Link href={`/players/${slot.externalPlayerId}`} className="hover:text-orange-600">
+                          {slot.player.fullName}
+                        </Link>
+                      ) : slot.externalPlayerId}
+                    </li>
                   ))}
                   {players.length === 0 && <li className="text-gray-500">No players</li>}
                 </ul>

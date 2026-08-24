@@ -24,6 +24,7 @@ export interface PlayerSearchParams {
   position?: string | null;
   page?: number;
   limit?: number;
+  excludePlayerIds?: ReadonlySet<string>;
 }
 
 export interface PlayerSearchResult {
@@ -128,12 +129,14 @@ export async function searchPlayers({
   position,
   page = 1,
   limit = 25,
+  excludePlayerIds,
 }: PlayerSearchParams): Promise<PlayerSearchResult> {
   const all = await getPlayers();
   const needle = q?.trim().toLowerCase();
   const filterPosition = toRosterablePosition(position);
 
   const matches = all.filter((player) => {
+    if (excludePlayerIds?.has(player.externalPlayerId)) return false;
     if (filterPosition && player.position !== filterPosition) return false;
     if (needle && !player.fullName.toLowerCase().includes(needle)) return false;
     return true;
