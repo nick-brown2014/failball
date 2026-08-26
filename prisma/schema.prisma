@@ -800,6 +800,26 @@ model PlayerWeekStats {
   @@map("player_week_stats")
 }
 
+model PlayerProjection {
+  id               String   @id @default(cuid())
+  source           String
+  season           Int
+  week             Int
+  externalPlayerId String
+  position         String?
+  nflTeam          String?
+  gamesProjected   Float?
+  yearsExp         Int?
+  stats            Json
+  sourceUpdatedAt  DateTime?
+  fetchedAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([source, season, week, externalPlayerId])
+  @@index([season, week])
+  @@map("player_projections")
+}
+
 // ============================================
 // Historical Records
 // ============================================

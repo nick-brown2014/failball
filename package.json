@@ -12,6 +12,7 @@
     "postinstall": "prisma generate",
     "db:seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "backfill": "npx tsx scripts/backfill-season.ts",
+    "projections": "npx tsx scripts/sync-projections.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
