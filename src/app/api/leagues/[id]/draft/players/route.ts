@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { publishDraftPick } from "@/lib/draft/events";
 import { settleExpiredDraftPicks } from "@/lib/draft/service";
 import { getDraftMember } from "@/lib/draft/state";
+import { getLastSeasonSummaries } from "@/lib/draft/history";
 import prisma from "@/lib/prisma";
 
 export async function GET(
@@ -48,7 +49,7 @@ export async function GET(
       position && Object.values(Position).includes(position as Position)
         ? (position as Position)
         : null;
-    const [players, total] = await Promise.all([
+    const [players, total, settings, league] = await Promise.all([
       prisma.$queryRaw<
         Array<{
           externalPlayerId: string;
@@ -84,7 +85,16 @@ export async function GET(
             : {}),
         },
       }),
+      prisma.leagueSettings.findUnique({ where: { leagueId: id } }),
+      prisma.league.findUnique({ where: { id }, select: { season: true } }),
     ]);
+    const summaries = settings
+      ? await getLastSeasonSummaries(
+          players.map((player) => player.externalPlayerId),
+          (league?.season ?? new Date().getUTCFullYear()) - 1,
+          settings as unknown as Record<string, unknown>,
+        )
+      : new Map();
     const draftedIds = new Set(
       draft
         ? (
@@ -99,6 +109,7 @@ export async function GET(
       players: players.map((player) => ({
         ...player,
         drafted: draftedIds.has(player.externalPlayerId),
+        lastSeason: summaries.get(player.externalPlayerId) ?? null,
       })),
       page,
       limit,

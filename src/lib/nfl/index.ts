@@ -85,6 +85,7 @@ export function getPlayerProvider(
 }
 
 export * from "./types";
+export { backfillSeason, buildGsisCrosswalk, remapPlayIds } from "./backfill";
 export {
   DEFAULT_DERIVATION_CONFIG,
   classifyCatch,

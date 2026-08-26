@@ -15,6 +15,11 @@ type DraftPlayer = {
   nflTeam: string | null;
   injuryStatus: string | null;
   drafted?: boolean;
+  lastSeason?: {
+    totalPoints: number;
+    avgPoints: number;
+    weeksPlayed: number;
+  } | null;
 };
 
 type DraftState = {
@@ -300,8 +305,13 @@ export default function DraftPage() {
               </div>
             )}
             <section className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Available players</h2>
+          <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Available players</h2>
+                  <Link href={`/leagues/${leagueId}/draft/rankings`} className="text-xs text-orange-600 hover:text-orange-500">
+                    View 2025 rankings
+                  </Link>
+                </div>
                 <span className="text-xs text-gray-500">{players.filter((player) => !player.drafted).length} shown</span>
               </div>
               <input
@@ -335,6 +345,11 @@ export default function DraftPage() {
                       <span>
                         <span className="font-medium">{player.fullName}</span>
                         <span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
+                        <span className="ml-3 text-xs text-gray-500">
+                          {player.lastSeason
+                            ? `${player.lastSeason.totalPoints.toFixed(2)} pts · ${player.lastSeason.avgPoints.toFixed(2)} avg`
+                            : "No 2025 data"}
+                        </span>
                       </span>
                       <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">{player.position}</span>
                     </button>
