@@ -151,10 +151,10 @@ export async function getProjectedScores(options: {
     const targets = historical
       ? catches + (historical.pcIncompleteTargets ?? 0)
       : 0;
-    const historicalCatchRate =
-      targets > 0 && ["WR", "TE"].includes(position?.toUpperCase() ?? "")
-        ? blendedCatchRate(catches, targets)
-        : null;
+    // Any pass catcher benefits, not just WR/TE: a running back's receptions carry
+    // the same target-recovery problem, and the rate is only consulted when the
+    // projection has receptions but no target count.
+    const historicalCatchRate = targets > 0 ? blendedCatchRate(catches, targets) : null;
     const translated = translateProjection({
       stats: numericStats(row.stats),
       week: row.week,
