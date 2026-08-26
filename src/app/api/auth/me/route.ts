@@ -21,6 +21,7 @@ export async function GET() {
         email: true,
         name: true,
         image: true,
+        emailNotificationsEnabled: true,
         createdAt: true,
         memberships: {
           select: {

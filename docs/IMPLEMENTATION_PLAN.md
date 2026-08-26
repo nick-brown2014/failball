@@ -197,7 +197,7 @@ Failball is a "reverse fantasy football" app where players score points for poor
 
 **Goal**: Team-to-team player trades with league oversight
 
-**Status**: Implemented — `/api/leagues/[id]/trades` (propose, accept, reject, counter, veto vote), `/leagues/[id]/trades`, `/leagues/[id]/trades/new`, `src/lib/trades/`. Trade deadline (`LeagueSettings.tradeDeadlineWeek`) and league-wide veto voting are enforced; execution is atomic and writes `Transaction` rows. Expiry is enforced when a trade is acted on rather than by a background sweep. Deferred: email/push notifications — proposals surface in-app and in the activity feed.
+**Status**: Implemented — `/api/leagues/[id]/trades` (propose, accept, reject, counter, veto vote), `/leagues/[id]/trades`, `/leagues/[id]/trades/new`, `src/lib/trades/`. Trade deadline (`LeagueSettings.tradeDeadlineWeek`) and league-wide veto voting are enforced; execution is atomic and writes `Transaction` rows. Expiry is enforced when a trade is acted on rather than by a background sweep. Trade proposals and outcomes send email notifications while continuing to surface in-app and in the activity feed.
 
 ### Tasks
 
@@ -231,7 +231,7 @@ Failball is a "reverse fantasy football" app where players score points for poor
 
 **Goal**: Waiver wire and free agent acquisition system
 
-**Status**: Implemented — `/api/leagues/[id]/free-agents` (instant add/drop), `/api/leagues/[id]/waivers` (claims + FAAB bids), `/api/leagues/[id]/waivers/process`, scheduled processing via `/api/sync/waivers` on `LeagueSettings.waiverProcessDay`, UI at `/leagues/[id]/free-agents` and `/leagues/[id]/waivers`, logic in `src/lib/waivers/process.ts` and `src/lib/roster/mutate.ts`. Both priority and FAAB resolution are supported with roster-limit enforcement.
+**Status**: Implemented — `/api/leagues/[id]/free-agents` (instant add/drop), `/api/leagues/[id]/waivers` (claims + FAAB bids), `/api/leagues/[id]/waivers/process`, scheduled processing via `/api/sync/waivers` on `LeagueSettings.waiverProcessDay`, UI at `/leagues/[id]/free-agents` and `/leagues/[id]/waivers`, logic in `src/lib/waivers/process.ts` and `src/lib/roster/mutate.ts`. Both priority and FAAB resolution are supported with roster-limit enforcement, and owners receive email results after processing.
 
 ### Tasks
 
@@ -269,7 +269,7 @@ Failball is a "reverse fantasy football" app where players score points for poor
 
 **Goal**: League management capabilities for commissioners
 
-**Status**: Implemented — `/leagues/[id]/commissioner` plus `/api/leagues/[id]/commissioner/*` (force add/drop, reverse transactions, force/veto/reverse trades, remove members, transfer the commissioner role) on top of the existing settings page. Draft pause/resume remains handled by the draft route (`POST /api/leagues/[id]/draft`, `action: "pause" | "resume"`). Deferred: a league-wide roster lock switch — lineups already lock at kickoff, and no schema field exists for a manual lock.
+**Status**: Implemented — `/leagues/[id]/commissioner` plus `/api/leagues/[id]/commissioner/*` (force add/drop, reverse transactions, force/veto/reverse trades, remove members, transfer the commissioner role) on top of the existing settings page. Draft pause/resume remains handled by the draft route (`POST /api/leagues/[id]/draft`, `action: "pause" | "resume"`). A league-wide roster lock switch is not needed because automatic locking at NFL kickoff is intentional.
 
 ### Tasks
 
@@ -416,9 +416,12 @@ The schema uses `externalPlayerId` fields to reference players, plus ID-crosswal
 
 ---
 
-## Next Steps
+## Confirmed Non-Action Items
 
-1. Set up PostgreSQL database (local or cloud)
-2. Configure DATABASE_URL environment variable
-3. Run `npx prisma migrate dev` to create tables
-4. Install NextAuth.js and begin Phase 1
+- **Item 3: manual roster-lock switch — NOT NEEDED.** Automatic player locking at NFL
+   kickoff is the intended behavior; no manual league-wide or commissioner
+   switch will be added.
+- **Item 6: environment variables / paid providers — NOT AN ACTION ITEM.**
+   `SPORTSDATAIO_API_KEY`, `CHARTING_API_KEY`, `RESEND_API_KEY`, `CRON_SECRET`,
+   `NEXTAUTH_SECRET`, and the other required credentials are already
+   provisioned locally and on Vercel.

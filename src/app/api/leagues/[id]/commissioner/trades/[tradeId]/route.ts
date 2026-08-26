@@ -14,6 +14,8 @@ import {
   RosterMutationError,
   rosterMutationStatus,
 } from "@/lib/roster/mutate";
+import { notifyTradeOutcome } from "@/lib/email/notifications";
+import { getAppUrl } from "@/lib/email/send";
 import prisma from "@/lib/prisma";
 import { VETO_VOTE_PLAYER_ID } from "@/lib/trades/logic";
 
@@ -160,6 +162,16 @@ export async function POST(
         include: tradeInclude,
       });
     });
+
+    try {
+      await notifyTradeOutcome(prisma, {
+        tradeId,
+        outcome: action === "push_through" ? "ACCEPTED" : "VETOED",
+        appUrl: getAppUrl(request),
+      });
+    } catch (error) {
+      console.error(`Failed to prepare commissioner trade notification for ${tradeId}:`, error);
+    }
 
     return NextResponse.json({ trade: result });
   } catch (error) {

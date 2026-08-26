@@ -2,12 +2,21 @@ import {
   AcquisitionType,
   Position,
   Prisma,
+  type PrismaClient,
   SlotType,
   WaiverStatus,
   WaiverType,
 } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { processWaivers, sortClaims } from "@/lib/waivers/process";
+
+const { notifyWaiverResultsMock } = vi.hoisted(() => ({
+  notifyWaiverResultsMock: vi.fn(),
+}));
+
+vi.mock("@/lib/email/notifications", () => ({
+  notifyWaiverResults: notifyWaiverResultsMock,
+}));
 
 vi.mock("@/lib/players", () => ({
   getPlayer: vi.fn(async (externalPlayerId: string) => ({
@@ -294,6 +303,52 @@ describe("sortClaims", () => {
 });
 
 describe("processWaivers", () => {
+  it("sends result notifications after the transaction commits", async () => {
+    const fake = fakeTx({
+      teams: [team("a", 1)],
+      claims: [claim("c1", "a", "p1")],
+      waiverType: WaiverType.ROLLING,
+    });
+    const order: string[] = [];
+    notifyWaiverResultsMock.mockReset();
+    notifyWaiverResultsMock.mockImplementation(async () => {
+      order.push("notify");
+    });
+    const db = {
+      ...fake.tx,
+      $transaction: vi.fn(
+        async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) => {
+          const summary = await callback(asTx(fake.tx));
+          order.push("commit");
+          return summary;
+        },
+      ),
+    } as unknown as PrismaClient;
+
+    await processWaivers(db, {
+      leagueId,
+      week: 3,
+      season: 2025,
+      appUrl: "https://failball.example",
+    });
+
+    expect(order).toEqual(["commit", "notify"]);
+    expect(notifyWaiverResultsMock).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        leagueId,
+        appUrl: "https://failball.example",
+        results: [
+          expect.objectContaining({
+            claimId: "c1",
+            status: WaiverStatus.APPROVED,
+            teamId: "a",
+          }),
+        ],
+      }),
+    );
+  });
+
   it("awards a FAAB player to the highest bidder and debits the budget", async () => {
     const fake = fakeTx({
       teams: [team("a", 1, 100), team("b", 2, 100)],

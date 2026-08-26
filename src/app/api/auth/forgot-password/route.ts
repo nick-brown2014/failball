@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import crypto from "crypto";
+import { getAppUrl, sendEmail } from "@/lib/email/send";
 import prisma from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -46,25 +46,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Build the reset URL using NEXTAUTH_URL (more reliable) or derive from request
-    // NEXTAUTH_URL is typically already configured for NextAuth.js authentication
-    // Fallback chain: NEXTAUTH_URL -> APP_URL -> request origin -> localhost
-    const origin = request.headers.get("origin") || request.headers.get("host");
-    const protocol = request.headers.get("x-forwarded-proto") || "https";
-    const derivedUrl = origin ? `${protocol}://${origin}` : null;
-    
-    const appUrl = process.env.NEXTAUTH_URL 
-      || process.env.APP_URL 
-      || derivedUrl 
-      || "http://localhost:3000";
-    
+    const appUrl = getAppUrl(request);
     const resetUrl = new URL("/auth/reset-password", appUrl);
     resetUrl.searchParams.set("token", token);
 
-    // Send the email via Resend
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    await resend.emails.send({
-      from: "Failball <onboarding@resend.dev>",
+    await sendEmail({
       to: email,
       subject: "Reset your Failball password",
       html: `

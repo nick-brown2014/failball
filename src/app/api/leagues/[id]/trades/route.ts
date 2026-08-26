@@ -7,6 +7,8 @@ import {
   validateTradePlayerSets,
 } from "@/lib/trades/logic";
 import { currentWeek } from "@/lib/schedule/currentWeek";
+import { notifyTradeProposal } from "@/lib/email/notifications";
+import { getAppUrl } from "@/lib/email/send";
 import { getPlayerMap } from "@/lib/players";
 import prisma from "@/lib/prisma";
 
@@ -324,6 +326,15 @@ export async function POST(
       });
       return created;
     });
+
+    try {
+      await notifyTradeProposal(prisma, {
+        tradeId: trade.id,
+        appUrl: getAppUrl(request),
+      });
+    } catch (error) {
+      console.error(`Failed to prepare trade proposal notification for ${trade.id}:`, error);
+    }
 
     return NextResponse.json({ trade }, { status: 201 });
   } catch (error) {

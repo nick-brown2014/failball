@@ -10,6 +10,7 @@ interface UserData {
   email: string;
   name: string | null;
   image: string | null;
+  emailNotificationsEnabled: boolean;
   createdAt: string;
   memberships: Array<{
     id: string;
@@ -38,6 +39,7 @@ export default function Dashboard() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
 
   const fetchUserData = async () => {
     setLoading(true);
@@ -56,6 +58,42 @@ export default function Dashboard() {
       setError(err instanceof Error ? err.message : "Unable to load your account");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleNotificationPreference = async (enabled: boolean) => {
+    setIsSavingNotifications(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/users", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ emailNotificationsEnabled: enabled }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update email notifications");
+      }
+      setUserData((current) =>
+        current
+          ? {
+              ...current,
+              emailNotificationsEnabled: data.user.emailNotificationsEnabled,
+            }
+          : current,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred while updating email notifications",
+      );
+    } finally {
+      setIsSavingNotifications(false);
     }
   };
 
@@ -256,9 +294,26 @@ export default function Dashboard() {
           )}
 
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <label className="flex items-center justify-between gap-4">
+              <span>
+                <span className="block font-medium">League event emails</span>
+                <span className="block text-sm text-gray-500 dark:text-gray-400">
+                  Trade updates and waiver claim results
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={displayData.emailNotificationsEnabled}
+                disabled={isSavingNotifications}
+                onChange={(event) =>
+                  handleNotificationPreference(event.target.checked)
+                }
+                className="h-5 w-5 accent-orange-600"
+              />
+            </label>
             <Link
               href="/auth/forgot-password"
-              className="text-sm font-medium text-orange-600 hover:text-orange-500"
+              className="mt-4 inline-block text-sm font-medium text-orange-600 hover:text-orange-500"
             >
               Reset password
             </Link>

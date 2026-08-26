@@ -1,36 +1,104 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Failball
 
-## Getting Started
+Failball is a reverse fantasy football application: NFL players earn fantasy
+points for poor performance, such as interceptions, sacks, fumbles, missed
+kicks, drops, and other negative outcomes. League members draft the players
+they expect to struggle and compete to post the highest score.
 
-First, run the development server:
+## Stack
+
+- Next.js 15, React 19, TypeScript, and Tailwind CSS v4
+- PostgreSQL with Prisma
+- NextAuth.js credentials authentication
+- Resend email delivery
+- Vercel hosting and scheduled jobs
+- Vitest for unit tests and Playwright for browser monitoring
+
+## Features
+
+- League creation, invitations, settings, and standings
+- Snake and auction drafts with realtime updates
+- Rosters, weekly lineups, and automatic player locks at NFL kickoff
+- Weekly schedules, live matchup scoring, playoffs, and season history
+- Trade proposals, counteroffers, voting, commissioner review, and transaction history
+- Rolling or FAAB waivers, free agency, and roster validation
+- Commissioner controls for league, roster, trade, and schedule administration
+- Email notifications for trade events and waiver results, with a per-user preference
+
+## Local development
+
+1. Copy `.env.example` to `.env` and provide the documented values.
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Generate Prisma Client and apply database migrations:
+
+   ```bash
+   npx prisma generate
+   npx prisma migrate dev
+   ```
+
+4. Seed the database:
+
+   ```bash
+   npm run db:seed
+   ```
+
+5. Start the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+The application is available at `http://localhost:3000`.
+
+## Testing and builds
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm test
+npx tsc --noEmit
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+To watch browser console, page, and network errors while the development server
+is running:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run monitor
+npm run monitor:headed
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## NFL data pipeline
 
-## Learn More
+Provider adapters in `src/lib/nfl/` ingest schedules, player metadata, live
+play-by-play, historical stats, and charting data. Derived weekly statistics
+feed the scoring engine and matchup records. Live score updates are published
+to signed-in clients through the `/api/live/stream` Server-Sent Events route.
 
-To learn more about Next.js, take a look at the following resources:
+Vercel schedules the production jobs defined in `vercel.json`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Route | Schedule | Purpose |
+| --- | --- | --- |
+| `/api/sync/schedule` | Daily at 09:00 UTC | Refresh the NFL schedule |
+| `/api/sync/players` | Daily at 09:30 UTC | Refresh players and injuries |
+| `/api/sync/live` | Every minute | Ingest live games and recompute scores |
+| `/api/sync/charting` | Tuesdays at 08:00 UTC | Reconcile charting-only statistics |
+| `/api/sync/finalize` | Daily at 10:00 UTC | Finalize completed weeks and standings |
+| `/api/sync/waivers` | Daily at 11:00 UTC | Process eligible league waiver claims |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Sync endpoints require `CRON_SECRET` through the Vercel bearer token or
+`x-cron-secret` header. The stats backfill route is available for historical
+re-derivation and audits but is not scheduled in `vercel.json`.
 
-## Deploy on Vercel
+## Project layout
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app/` — application pages and API route handlers
+- `src/lib/` — domain services for scoring, drafts, trades, waivers, NFL data,
+  realtime events, scheduling, roster rules, history, and transactions
+- `prisma/schema.prisma` — PostgreSQL data model
+- `prisma/migrations/` — database migrations
+- `tests/` — Vitest unit tests
+- `docs/IMPLEMENTATION_PLAN.md` — architecture and implementation history

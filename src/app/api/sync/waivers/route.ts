@@ -11,6 +11,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { requireCronAuth } from "@/lib/cron";
+import { getAppUrl } from "@/lib/email/send";
 import prisma from "@/lib/prisma";
 import { currentWeek } from "@/lib/schedule/currentWeek";
 import { processWaivers, type WaiverProcessSummary } from "@/lib/waivers/process";
@@ -58,6 +59,7 @@ async function handle(request: NextRequest) {
           leagueId: league.id,
           week,
           season: league.season,
+          appUrl: getAppUrl(request),
         }),
       );
     }
