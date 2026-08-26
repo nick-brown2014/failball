@@ -308,7 +308,7 @@ export default function DraftPage() {
               </div>
             )}
             <section className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800">
-          <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Available players</h2>
                   <Link href={`/leagues/${leagueId}/draft/rankings`} className="text-xs text-orange-600 hover:text-orange-500">
