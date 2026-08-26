@@ -8,13 +8,19 @@ import {
 
 const UPSERT_BATCH_SIZE = 100;
 
+// Most players carry ADP and games-played values with no projected production;
+// only a non-ADP stat means the source actually projects the player.
+function hasProjectedStats(stats: Record<string, number>): boolean {
+  return Object.keys(stats).some((key) => key !== "gp" && !key.startsWith("adp_"));
+}
+
 export interface ProjectionSyncResult {
   source: string;
   season: number;
   week: number;
   records: number;
   upserted: number;
-  withStats: number;
+  withProjectedStats: number;
   rookies: number;
 }
 
@@ -46,7 +52,7 @@ export async function syncProjections(options: {
     week: normalizedWeek ?? 0,
     records: projections.length,
     upserted: projections.length,
-    withStats: projections.filter((projection) => Object.keys(projection.stats).length > 0).length,
+    withProjectedStats: projections.filter((projection) => hasProjectedStats(projection.stats)).length,
     rookies: projections.filter((projection) => projection.yearsExp === 0).length,
   };
 }
