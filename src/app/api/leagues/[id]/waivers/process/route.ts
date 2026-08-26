@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { isAuthorizedCronRequest } from "@/lib/cron";
+import { getAppUrl } from "@/lib/email/send";
 import prisma from "@/lib/prisma";
 import { currentWeek } from "@/lib/schedule/currentWeek";
 import { processWaivers } from "@/lib/waivers/process";
@@ -96,6 +97,7 @@ export async function POST(
       leagueId: id,
       week,
       season: league.season,
+      appUrl: getAppUrl(request),
     });
 
     return NextResponse.json({ ok: true, summary });

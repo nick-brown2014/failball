@@ -20,6 +20,8 @@ import {
   addPlayerToRoster,
   RosterMutationError,
 } from "@/lib/roster/mutate";
+import { notifyWaiverResults } from "@/lib/email/notifications";
+import { getAppUrl } from "@/lib/email/send";
 import { sortStandings } from "@/lib/schedule/standings";
 import { logTransaction } from "@/lib/transactions/log";
 
@@ -29,6 +31,7 @@ export interface ProcessWaiversArgs {
   leagueId: string;
   week: number;
   season: number;
+  appUrl?: string;
 }
 
 export interface WaiverClaimOutcome {
@@ -87,7 +90,22 @@ export async function processWaivers(
   args: ProcessWaiversArgs,
 ): Promise<WaiverProcessSummary> {
   if (hasTransaction(db)) {
-    return db.$transaction((tx) => resolveWaivers(tx, args), { timeout: 60_000 });
+    const summary = await db.$transaction((tx) => resolveWaivers(tx, args), {
+      timeout: 60_000,
+    });
+    try {
+      await notifyWaiverResults(db, {
+        leagueId: args.leagueId,
+        results: summary.results,
+        appUrl: args.appUrl ?? getAppUrl(),
+      });
+    } catch (error) {
+      console.error(
+        `Failed to prepare waiver result notifications for ${args.leagueId}:`,
+        error,
+      );
+    }
+    return summary;
   }
   return resolveWaivers(db, args);
 }

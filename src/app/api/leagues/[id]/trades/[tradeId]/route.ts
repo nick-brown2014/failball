@@ -8,6 +8,8 @@ import {
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
+import { notifyTradeOutcome } from "@/lib/email/notifications";
+import { getAppUrl } from "@/lib/email/send";
 import {
   canVetoTrade,
   countVetoVotes,
@@ -495,6 +497,29 @@ async function handleTradeAction(
         }),
       };
     });
+
+    const outcome =
+      action === "accept" || action === "force_approve"
+        ? "ACCEPTED"
+        : action === "reject"
+          ? "REJECTED"
+          : action === "counter"
+            ? "COUNTERED"
+            : result.trade.status === TradeStatus.VETOED &&
+                existing.status !== TradeStatus.VETOED
+              ? "VETOED"
+              : null;
+    if (outcome) {
+      try {
+        await notifyTradeOutcome(prisma, {
+          tradeId,
+          outcome,
+          appUrl: getAppUrl(request),
+        });
+      } catch (error) {
+        console.error(`Failed to prepare ${outcome.toLowerCase()} trade notification for ${tradeId}:`, error);
+      }
+    }
 
     return NextResponse.json(result);
   } catch (error) {

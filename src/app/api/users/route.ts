@@ -17,39 +17,67 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name } = body;
+    const { name, emailNotificationsEnabled } = body;
+    const data: {
+      name?: string;
+      emailNotificationsEnabled?: boolean;
+    } = {};
 
-    if (typeof name !== "string") {
+    if (name !== undefined) {
+      if (typeof name !== "string") {
+        return NextResponse.json(
+          { error: "Name must be a string" },
+          { status: 400 }
+        );
+      }
+
+      const trimmedName = name.trim();
+
+      if (trimmedName.length === 0) {
+        return NextResponse.json(
+          { error: "Name cannot be empty" },
+          { status: 400 }
+        );
+      }
+
+      if (trimmedName.length > 100) {
+        return NextResponse.json(
+          { error: "Name cannot exceed 100 characters" },
+          { status: 400 }
+        );
+      }
+      data.name = trimmedName;
+    }
+
+    if (
+      emailNotificationsEnabled !== undefined &&
+      typeof emailNotificationsEnabled !== "boolean"
+    ) {
       return NextResponse.json(
-        { error: "Name must be a string" },
+        { error: "Email notification preference must be a boolean" },
         { status: 400 }
       );
     }
-
-    const trimmedName = name.trim();
-
-    if (trimmedName.length === 0) {
-      return NextResponse.json(
-        { error: "Name cannot be empty" },
-        { status: 400 }
-      );
+    if (typeof emailNotificationsEnabled === "boolean") {
+      data.emailNotificationsEnabled = emailNotificationsEnabled;
     }
 
-    if (trimmedName.length > 100) {
+    if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: "Name cannot exceed 100 characters" },
+        { error: "No supported user fields were provided" },
         { status: 400 }
       );
     }
 
     const updatedUser = await prisma.user.update({
       where: { id: session.user.id },
-      data: { name: trimmedName },
+      data,
       select: {
         id: true,
         email: true,
         name: true,
         image: true,
+        emailNotificationsEnabled: true,
         createdAt: true,
       },
     });
