@@ -6,7 +6,7 @@
  * can be driven by a cron request, a worker, or a test.
  */
 
-import { Position, type Prisma } from "@prisma/client";
+import { Position, type Prisma, type PrismaClient } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { deriveStats, type DerivedPlayerWeekStats } from "./derive";
 import type { NormalizedPlay } from "./types";
@@ -147,10 +147,11 @@ export async function upsertPlays(
   gameId: string,
   plays: NormalizedPlay[],
   source: string,
+  prismaClient: PrismaClient = prisma,
 ): Promise<number> {
   for (const play of plays) {
     const data = playEventData(play, source);
-    await prisma.playEvent.upsert({
+    await prismaClient.playEvent.upsert({
       where: { gameId_externalPlayId: { gameId, externalPlayId: play.externalPlayId } },
       create: { gameId, externalPlayId: play.externalPlayId, ...data },
       update: data,
@@ -181,21 +182,33 @@ export async function deriveAndPersist(options: {
   season: number;
   week: number;
   gameIds?: string[];
+  plays?: NormalizedPlay[];
+  prismaClient?: PrismaClient;
   source?: string;
   isFinal?: boolean;
 }): Promise<DerivedPlayerWeekStats[]> {
-  const { season, week, gameIds, source = "sportsdataio", isFinal = false } = options;
+  const {
+    season,
+    week,
+    gameIds,
+    plays: providedPlays,
+    prismaClient = prisma,
+    source = "sportsdataio",
+    isFinal = false,
+  } = options;
 
-  const rows = await prisma.playEvent.findMany({
-    where: {
-      season,
-      week,
-      ...(gameIds && gameIds.length > 0 ? { gameId: { in: gameIds } } : {}),
-    },
-    include: { game: { select: { externalGameId: true } } },
-  });
-
-  const plays = rows.map(playEventToNormalizedPlay);
+  const plays =
+    providedPlays ??
+    (
+      await prismaClient.playEvent.findMany({
+        where: {
+          season,
+          week,
+          ...(gameIds && gameIds.length > 0 ? { gameId: { in: gameIds } } : {}),
+        },
+        include: { game: { select: { externalGameId: true } } },
+      })
+    ).map(playEventToNormalizedPlay);
 
   const playerIds = [
     ...new Set(
@@ -206,7 +219,7 @@ export async function deriveAndPersist(options: {
       ),
     ),
   ];
-  const players = await prisma.player.findMany({
+  const players = await prismaClient.player.findMany({
     where: { externalPlayerId: { in: playerIds } },
     select: { externalPlayerId: true, position: true },
   });
@@ -219,7 +232,7 @@ export async function deriveAndPersist(options: {
   for (const stats of derived) {
     const { externalPlayerId, nflTeam, pcDrop: _drop, pcRouteNotTargeted: _routes, ...counts } = stats;
     const position = positionsByPlayerId[externalPlayerId];
-    await prisma.playerWeekStats.upsert({
+    await prismaClient.playerWeekStats.upsert({
       where: { externalPlayerId_season_week: { externalPlayerId, season, week } },
       create: {
         externalPlayerId,

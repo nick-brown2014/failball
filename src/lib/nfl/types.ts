@@ -120,6 +120,8 @@ export interface NflPbpProvider {
   getLivePlays(externalGameId: string): Promise<NormalizedPlay[]>;
   /** Whole-week plays, used for backfill / reconciliation. */
   getPlays(season: number, week: number): Promise<NormalizedPlay[]>;
+  /** Whole-season plays, when the provider can download them in one request. */
+  getSeasonPlays?(season: number): Promise<NormalizedPlay[]>;
 }
 
 /** The only two values we license charting for. */

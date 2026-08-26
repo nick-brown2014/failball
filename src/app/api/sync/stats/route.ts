@@ -15,6 +15,7 @@ import { GameStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireCronAuth } from "@/lib/cron";
 import { getBackfillPbpProvider } from "@/lib/nfl";
+import { buildGsisCrosswalk, remapPlayIds } from "@/lib/nfl/backfill";
 import { deriveStats } from "@/lib/nfl/derive";
 import { deriveAndPersist, upsertPlays } from "@/lib/nfl/ingest";
 import { recomputeWeekScores } from "@/lib/scoring/updateMatchups";
@@ -40,9 +41,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const plays = await provider.getPlays(season, week);
+    const crosswalk = await buildGsisCrosswalk();
+    const remapped = remapPlayIds(plays, crosswalk);
 
     if (auditOnly) {
-      const derived = deriveStats(plays);
+      const derived = deriveStats(remapped.plays, {
+        positionsByPlayerId: Object.fromEntries(
+          (
+            await prisma.player.findMany({
+              where: {
+                externalPlayerId: {
+                  in: [
+                    ...new Set(
+                      remapped.plays.flatMap((play) =>
+                        [play.passerId, play.rusherId, play.receiverId, play.kickerId, play.returnerId].filter(
+                          (id): id is string => id != null,
+                        ),
+                      ),
+                    ),
+                  ],
+                },
+              },
+              select: { externalPlayerId: true, position: true },
+            })
+          ).map((player) => [player.externalPlayerId, player.position]),
+        ),
+      });
       const stored = await prisma.playerWeekStats.findMany({ where: { season, week } });
       const storedByPlayer = new Map(stored.map((row) => [row.externalPlayerId, row]));
       const differences = Object.values(derived)
@@ -77,14 +101,15 @@ export async function POST(request: NextRequest) {
         provider: provider.name,
         season,
         week,
-        plays: plays.length,
+        plays: remapped.plays.length,
+        unresolvedIds: remapped.unresolvedIds.size,
         mismatches: differences,
       });
     }
 
     // Group plays by game so PlayEvent rows attach to the right Game row.
     const byGame = new Map<string, typeof plays>();
-    for (const play of plays) {
+    for (const play of remapped.plays) {
       const list = byGame.get(play.externalGameId) ?? [];
       list.push(play);
       byGame.set(play.externalGameId, list);
@@ -125,9 +150,10 @@ export async function POST(request: NextRequest) {
       season,
       week,
       games: gameIds.length,
-      plays: plays.length,
+      plays: remapped.plays.length,
       statLines: derived.length,
       matchups: matchups.length,
+      unresolvedIds: remapped.unresolvedIds.size,
     });
   } catch (error) {
     console.error("sync/stats failed", error);

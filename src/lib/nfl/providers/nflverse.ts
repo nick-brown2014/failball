@@ -220,8 +220,13 @@ export class NflverseProvider implements NflPbpProvider {
   }
 
   async getPlays(season: number, week: number): Promise<NormalizedPlay[]> {
+    const plays = await this.getSeasonPlays(season);
+    return plays.filter((play) => play.week === week);
+  }
+
+  async getSeasonPlays(season: number): Promise<NormalizedPlay[]> {
     const rows = await fetchCsv(PBP_URL(season));
-    return rows.filter((row) => num(row.week) === week).map(normalizeRow);
+    return rows.map(normalizeRow);
   }
 }
 
