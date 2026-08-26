@@ -15,11 +15,6 @@ const PLAYER_ID_FIELDS = [
 
 type PlayerIdField = (typeof PLAYER_ID_FIELDS)[number];
 
-export interface GsisCrosswalk {
-  byGsisId: Map<string, string>;
-  unresolvedIds: Set<string>;
-}
-
 /** Build the nflverse GSIS -> canonical Sleeper player id crosswalk. */
 export async function buildGsisCrosswalk(
   prismaClient: PrismaClient = prisma,
@@ -67,6 +62,7 @@ export interface BackfillResult {
   games: number;
   plays: number;
   statLines: number;
+  prunedStatLines: number;
   unresolvedIds: number;
   unresolvedIdValues: string[];
 }
@@ -111,7 +107,6 @@ export async function backfillSeason(options: {
   const allowedWeeks = weeks
     ? [...new Set(weeks)].sort((a, b) => a - b)
     : [...new Set(schedule.map((game) => game.week))].sort((a, b) => a - b);
-  const scheduleById = new Map(schedule.map((game) => [game.externalGameId, game]));
   const playsByWeek = new Map<number, NormalizedPlay[]>();
   for (const play of remapped.plays) {
     if (!allowedWeeks.includes(play.week)) continue;
@@ -166,13 +161,42 @@ export async function backfillSeason(options: {
     statLines += derived.length;
   }
 
+  const rawStatRows = await prismaClient.playerWeekStats.findMany({
+    where: {
+      season,
+      externalPlayerId: { startsWith: "00-" },
+    },
+    select: { externalPlayerId: true },
+  });
+  const rawIds = [
+    ...new Set(
+      rawStatRows
+        .map((row) => row.externalPlayerId)
+        .filter((id) => /^00-\d{7}$/.test(id)),
+    ),
+  ];
+  const knownPlayers = await prismaClient.player.findMany({
+    where: { externalPlayerId: { in: rawIds } },
+    select: { externalPlayerId: true },
+  });
+  const knownIds = new Set(knownPlayers.map((player) => player.externalPlayerId));
+  const staleIds = rawIds.filter((id) => !knownIds.has(id));
+  const prunedStatLines = staleIds.length
+    ? (
+        await prismaClient.playerWeekStats.deleteMany({
+          where: { season, externalPlayerId: { in: staleIds } },
+        })
+      ).count
+    : 0;
+
   return {
     season,
     weeks: allowedWeeks,
     games: schedule.length,
     plays: remapped.plays.filter((play) => allowedWeeks.includes(play.week)).length,
     statLines,
+    prunedStatLines,
     unresolvedIds: remapped.unresolvedIds.size,
-    unresolvedIdValues: [...remapped.unresolvedIds].sort(),
+    unresolvedIdValues: [...remapped.unresolvedIds].sort().slice(0, 25),
   };
 }

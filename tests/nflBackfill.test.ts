@@ -55,6 +55,8 @@ describe("season backfill", () => {
         },
       },
       playerWeekStats: {
+        findMany: async () => [],
+        deleteMany: async () => ({ count: 0 }),
         upsert: async ({ where, create, update }: { where: { externalPlayerId_season_week: { externalPlayerId: string; season: number; week: number } }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
           const key = `${where.externalPlayerId_season_week.externalPlayerId}:${where.externalPlayerId_season_week.season}:${where.externalPlayerId_season_week.week}`;
           stats.set(key, { ...(stats.get(key) ?? create), ...update });

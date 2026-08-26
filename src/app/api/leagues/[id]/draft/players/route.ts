@@ -6,6 +6,7 @@ import { publishDraftPick } from "@/lib/draft/events";
 import { settleExpiredDraftPicks } from "@/lib/draft/service";
 import { getDraftMember } from "@/lib/draft/state";
 import { getLastSeasonSummaries } from "@/lib/draft/history";
+import { getLastSeason } from "@/lib/draft/season";
 import prisma from "@/lib/prisma";
 
 export async function GET(
@@ -49,6 +50,9 @@ export async function GET(
       position && Object.values(Position).includes(position as Position)
         ? (position as Position)
         : null;
+    const includePostseason = ["1", "true"].includes(
+      request.nextUrl.searchParams.get("includePostseason")?.toLowerCase() ?? "",
+    );
     const [players, total, settings, league] = await Promise.all([
       prisma.$queryRaw<
         Array<{
@@ -91,8 +95,9 @@ export async function GET(
     const summaries = settings
       ? await getLastSeasonSummaries(
           players.map((player) => player.externalPlayerId),
-          (league?.season ?? new Date().getUTCFullYear()) - 1,
+          getLastSeason(league?.season ?? new Date().getUTCFullYear()),
           settings as unknown as Record<string, unknown>,
+          includePostseason,
         )
       : new Map();
     const draftedIds = new Set(
@@ -114,6 +119,8 @@ export async function GET(
       page,
       limit,
       total,
+      season: getLastSeason(league?.season ?? new Date().getUTCFullYear()),
+      includePostseason,
     });
   } catch (error) {
     console.error("Get draft players error:", error);

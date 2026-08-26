@@ -31,13 +31,12 @@ export default function DraftRankingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const season = new Date().getUTCFullYear() - 1;
+  const [season, setSeason] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const search = new URLSearchParams({
-        season: String(season),
         page: String(page),
         limit: "50",
         sort,
@@ -49,13 +48,14 @@ export default function DraftRankingsPage() {
       if (!response.ok) throw new Error(payload.error || "Unable to load rankings");
       setPlayers(payload.players);
       setTotal(payload.total);
+      setSeason(payload.season);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load rankings");
     } finally {
       setLoading(false);
     }
-  }, [id, page, position, query, season, sort]);
+  }, [id, page, position, query, sort]);
 
   useEffect(() => {
     void load();
@@ -71,7 +71,9 @@ export default function DraftRankingsPage() {
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">Draft rankings</h1>
-            <p className="text-gray-500">Historical Failball points for the {season} season.</p>
+            <p className="text-gray-500">
+              Historical Failball points for the {season == null ? "previous" : season} season.
+            </p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => { setSort("total"); setPage(1); }} className={`rounded px-3 py-2 text-sm ${sort === "total" ? "bg-orange-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>Total</button>

@@ -94,6 +94,7 @@ export default function DraftPage() {
   const [query, setQuery] = useState("");
   const [playerPage, setPlayerPage] = useState(1);
   const [playerTotal, setPlayerTotal] = useState(0);
+  const [lastSeason, setLastSeason] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -150,6 +151,7 @@ export default function DraftPage() {
     if (response.ok) {
       setPlayers((current) => (append ? [...current, ...data.players] : data.players));
       setPlayerTotal(data.total);
+      setLastSeason(data.season);
     }
   }, [leagueId, position, query, state?.draft?.status]);
 
@@ -260,6 +262,7 @@ export default function DraftPage() {
       </div>
     );
   }
+  const fallbackLastSeason = state.league.season - 1;
 
   return (
     <div className="min-h-screen font-sans">
@@ -309,7 +312,7 @@ export default function DraftPage() {
                 <div>
                   <h2 className="text-lg font-semibold">Available players</h2>
                   <Link href={`/leagues/${leagueId}/draft/rankings`} className="text-xs text-orange-600 hover:text-orange-500">
-                    View 2025 rankings
+                    View {lastSeason ?? state.league.season - 1} rankings
                   </Link>
                 </div>
                 <span className="text-xs text-gray-500">{players.filter((player) => !player.drafted).length} shown</span>
@@ -348,7 +351,7 @@ export default function DraftPage() {
                         <span className="ml-3 text-xs text-gray-500">
                           {player.lastSeason
                             ? `${player.lastSeason.totalPoints.toFixed(2)} pts · ${player.lastSeason.avgPoints.toFixed(2)} avg`
-                            : "No 2025 data"}
+                            : `No ${lastSeason ?? fallbackLastSeason} data`}
                         </span>
                       </span>
                       <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">{player.position}</span>

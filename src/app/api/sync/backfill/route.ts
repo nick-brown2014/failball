@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       weeks: result.weeks,
       games: result.games,
       statLines: result.statLines,
+      prunedStatLines: result.prunedStatLines,
       unresolvedIds: result.unresolvedIds,
     });
   } catch (error) {

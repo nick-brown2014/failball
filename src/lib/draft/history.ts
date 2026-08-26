@@ -7,6 +7,9 @@ import {
   type ScorableStats,
 } from "@/lib/scoring/computeScore";
 
+/** NFL regular seasons end after week 18; postseason rows remain available separately. */
+export const REGULAR_SEASON_LAST_WEEK = 18;
+
 const COUNT_COLUMNS = [
   ...new Set(SCORING_FIELDS.map(([, countField]) => countField)),
 ];
@@ -47,14 +50,28 @@ function scoreExpression(settings: Record<string, unknown>): Prisma.Sql {
   return Prisma.sql`(${Prisma.join([...countTerms, ...bucketTerms], " + ")})`;
 }
 
-/** Exported for the SQL/computeScore equivalence test and query inspection. */
-export function buildRankingScoreExpression(settings: Record<string, unknown>): Prisma.Sql {
-  return scoreExpression(settings);
-}
-
-function rankingWhere(season: number, position?: string | null, q?: string | null) {
-  const terms: Prisma.Sql[] = [Prisma.sql`"s"."season" = ${season}`];
-  if (position) terms.push(Prisma.sql`"s"."position" = ${position}::"Position"`);
+function rankingWhere(
+  season: number,
+  position?: string | null,
+  q?: string | null,
+  includePostseason = false,
+) {
+  const terms: Prisma.Sql[] = [
+    Prisma.sql`"s"."season" = ${season}`,
+    ...(includePostseason
+      ? []
+      : [Prisma.sql`"s"."week" <= ${REGULAR_SEASON_LAST_WEEK}`]),
+    Prisma.sql`(
+      "p"."externalPlayerId" IS NOT NULL
+      OR "s"."externalPlayerId" LIKE 'DEF:%'
+      OR "s"."externalPlayerId" LIKE 'ST:%'
+    )`,
+  ];
+  if (position) {
+    terms.push(
+      Prisma.sql`COALESCE("p"."position", "s"."position") = ${position}::"Position"`,
+    );
+  }
   if (q) {
     terms.push(
       Prisma.sql`COALESCE("p"."fullName", "s"."externalPlayerId") ILIKE '%' || ${q} || '%'`,
@@ -76,6 +93,7 @@ export async function getDraftRankings(options: {
   page?: number;
   limit?: number;
   sort?: DraftRankingSort;
+  includePostseason?: boolean;
   prismaClient?: PrismaClient;
 }): Promise<DraftRankingsResult> {
   const {
@@ -86,6 +104,7 @@ export async function getDraftRankings(options: {
     page = 1,
     limit = 50,
     sort = "total",
+    includePostseason = false,
     prismaClient = prisma,
   } = options;
   const settings = await prismaClient.leagueSettings.findUnique({
@@ -94,7 +113,7 @@ export async function getDraftRankings(options: {
   if (!settings) throw new Error("League settings not found");
 
   const score = scoreExpression(settings as unknown as Record<string, unknown>);
-  const where = rankingWhere(season, position, q);
+  const where = rankingWhere(season, position, q, includePostseason);
   const order = sort === "avg" ? `"avgPoints"` : `"totalPoints"`;
   const offset = (page - 1) * limit;
   const rows = await prismaClient.$queryRaw<
@@ -153,6 +172,7 @@ export async function getDraftRankings(options: {
           "s"."defYardsAllowedBucket", ${weeklySelect}
         FROM "public"."player_week_stats" "s"
         WHERE "s"."season" = ${season}
+          ${includePostseason ? Prisma.empty : Prisma.sql`AND "s"."week" <= ${REGULAR_SEASON_LAST_WEEK}`}
           AND "s"."externalPlayerId" IN (${Prisma.join(ids)})
         ORDER BY "s"."externalPlayerId" ASC, "s"."week" ASC
       `)
@@ -194,6 +214,7 @@ export async function getLastSeasonSummaries(
   externalPlayerIds: string[],
   season: number,
   settings: Record<string, unknown>,
+  includePostseason = false,
   prismaClient: PrismaClient = prisma,
 ) {
   if (externalPlayerIds.length === 0) return new Map<string, { totalPoints: number; avgPoints: number; weeksPlayed: number }>();
@@ -201,14 +222,22 @@ export async function getLastSeasonSummaries(
   const rows = await prismaClient.$queryRaw<
     Array<{ externalPlayerId: string; totalPoints: number; avgPoints: number; weeksPlayed: number }>
   >(Prisma.sql`
-    SELECT "externalPlayerId",
+    SELECT "s"."externalPlayerId",
       ROUND(SUM(${score})::numeric, 2)::float8 AS "totalPoints",
       ROUND((SUM(${score}) / COUNT(*))::numeric, 2)::float8 AS "avgPoints",
       COUNT(*)::int AS "weeksPlayed"
     FROM "public"."player_week_stats" "s"
+    LEFT JOIN "public"."players" "p"
+      ON "p"."externalPlayerId" = "s"."externalPlayerId"
     WHERE "s"."season" = ${season}
+      ${includePostseason ? Prisma.empty : Prisma.sql`AND "s"."week" <= ${REGULAR_SEASON_LAST_WEEK}`}
       AND "s"."externalPlayerId" IN (${Prisma.join(externalPlayerIds)})
-    GROUP BY "externalPlayerId"
+      AND (
+        "p"."externalPlayerId" IS NOT NULL
+        OR "s"."externalPlayerId" LIKE 'DEF:%'
+        OR "s"."externalPlayerId" LIKE 'ST:%'
+      )
+    GROUP BY "s"."externalPlayerId"
   `);
   return new Map(rows.map((row) => [row.externalPlayerId, row]));
 }
