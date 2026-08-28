@@ -5,6 +5,7 @@ import {
   getProjectedScores,
   type ProjectedPlayerScore,
 } from "@/lib/projections/service";
+import type { ProjectionBasis, ProjectionConfidence } from "@/lib/projections/blend";
 
 export interface ProjectedRanking {
   externalPlayerId: string;
@@ -25,6 +26,10 @@ export interface ProjectionSummary {
   isRookie: boolean;
   estimatedFields: string[];
   unprojectedFields: string[];
+  rawTotalPoints: number | null;
+  rawAvgPoints: number | null;
+  basis: ProjectionBasis | null;
+  confidence: ProjectionConfidence;
 }
 
 function normalizedPosition(position: string | null | undefined): string | null {
@@ -123,6 +128,10 @@ export async function getProjectedRankings(options: {
           isRookie: player.isRookie,
           estimatedFields: player.estimatedFields,
           unprojectedFields: player.unprojectedFields,
+          rawTotalPoints: player.rawTotalPoints,
+          rawAvgPoints: player.rawAvgPoints,
+          basis: player.basis,
+          confidence: player.confidence,
         },
       };
     }),
@@ -157,6 +166,10 @@ export async function attachProjections<T extends { externalPlayerId: string }>(
             isRookie: projection.isRookie,
             estimatedFields: projection.estimatedFields,
             unprojectedFields: projection.unprojectedFields,
+            rawTotalPoints: projection.rawTotalPoints,
+            rawAvgPoints: projection.rawAvgPoints,
+            basis: projection.basis,
+            confidence: projection.confidence,
           }
         : null,
     };

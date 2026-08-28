@@ -123,6 +123,16 @@ const projectionRows = [
     yearsExp: 0,
     stats: {},
   },
+  {
+    externalPlayerId: "unknown",
+    source: "rotowire",
+    season: 2026,
+    week: 0,
+    position: null,
+    nflTeam: null,
+    yearsExp: null,
+    stats: {},
+  },
 ];
 
 const players = projectionRows.map((row) => ({
@@ -242,8 +252,12 @@ describe("draft projection helpers", () => {
       totalPoints: 12.5,
       avgPoints: 1.25,
       projected: expect.objectContaining({
-        totalPoints: expect.any(Number),
+        totalPoints: null,
         coverage: expect.any(String),
+        rawTotalPoints: expect.any(Number),
+        rawAvgPoints: expect.any(Number),
+        basis: null,
+        confidence: expect.any(String),
       }),
     });
     expect(result.players.find((player) => player.externalPlayerId === "kicker")).toMatchObject({
