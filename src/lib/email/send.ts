@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-const FROM = "Failball <onboarding@resend.dev>";
+const DEFAULT_FROM = "Failball <onboarding@resend.dev>";
 let warnedAboutMissingKey = false;
 
 export interface EmailMessage {
@@ -23,7 +23,7 @@ export async function sendEmail(message: EmailMessage): Promise<boolean> {
 
   const resend = new Resend(apiKey);
   const { error } = await resend.emails.send({
-    from: FROM,
+    from: process.env.EMAIL_FROM ?? DEFAULT_FROM,
     ...message,
   });
 

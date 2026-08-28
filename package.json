@@ -10,14 +10,14 @@
     "monitor": "node scripts/browser-monitor.js",
     "monitor:headed": "node scripts/browser-monitor.js --headed",
     "postinstall": "prisma generate",
-    "db:seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
+    "db:seed": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "backfill": "npx tsx scripts/backfill-season.ts",
     "projections": "npx tsx scripts/sync-projections.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "prisma": {
-    "seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "seed": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
