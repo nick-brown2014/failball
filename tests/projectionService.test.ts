@@ -7,12 +7,18 @@ const settings = {
   pcIncompleteTarget: 2,
 };
 
+function historicalSummary(externalPlayerId: string, avgPoints: number, weeksPlayed: number) {
+  return { externalPlayerId, totalPoints: avgPoints * weeksPlayed, avgPoints, weeksPlayed };
+}
+
 function fakePrisma(overrides: {
   settings?: object | null;
   seasonRows?: object[];
   weekRows?: object[];
   players?: object[];
   historical?: object[];
+  summaries?: object[];
+  positionMeans?: object[];
 }) {
   const {
     settings: leagueSettings = settings,
@@ -20,12 +26,16 @@ function fakePrisma(overrides: {
     weekRows = [],
     players = [],
     historical = [],
+    summaries = [],
+    positionMeans = [],
   } = overrides;
   const projectionCalls: object[] = [];
   const groupByCalls: object[] = [];
+  const queryRawCallArgs: object[] = [];
   return {
     projectionCalls,
     groupByCalls,
+    queryRawCallArgs,
     leagueSettings: {
       findUnique: async () => leagueSettings,
     },
@@ -44,9 +54,14 @@ function fakePrisma(overrides: {
         return historical;
       },
     },
+    $queryRaw: async (query: object) => {
+      queryRawCallArgs.push(query);
+      return queryRawCallArgs.length === 1 ? positionMeans : summaries;
+    },
   } as unknown as PrismaClient & {
     projectionCalls: object[];
     groupByCalls: object[];
+    queryRawCallArgs: object[];
   };
 }
 
@@ -134,22 +149,30 @@ describe("projection scoring service", () => {
 
     expect(result.map((row) => row.externalPlayerId)).toEqual([
       "qb-high",
-      "wr-rookie",
       "no-projection",
+      "wr-rookie",
     ]);
-    expect(result[0].totalPoints).toBe(99.96);
-    expect(result[0].avgPoints).toBeCloseTo(100 / 17, 2);
-    expect(result[1]).toMatchObject({
+    expect(result.find((row) => row.externalPlayerId === "qb-high")).toMatchObject({
+      totalPoints: 169.66,
+      avgPoints: 9.98,
+      rawTotalPoints: 99.96,
+      rawAvgPoints: expect.closeTo(100 / 17, 2),
+      basis: "POSITION_MEAN",
+      confidence: "LOW",
+    });
+    expect(result.find((row) => row.externalPlayerId === "wr-rookie")).toMatchObject({
       fullName: "Rookie WR",
       nflTeam: "NYG",
       isRookie: true,
-      totalPoints: 20.06,
+      basis: "BLEND",
+      confidence: "MEDIUM",
     });
-    expect(result[1].estimatedFields).toContain("pcIncompleteTargets");
-    expect(result[2]).toMatchObject({
-      totalPoints: null,
-      avgPoints: null,
-      coverage: "UNPROJECTED",
+    expect(result.find((row) => row.externalPlayerId === "wr-rookie")?.estimatedFields).toContain(
+      "pcIncompleteTargets",
+    );
+    expect(result.find((row) => row.externalPlayerId === "no-projection")).toMatchObject({
+      totalPoints: 169.66,
+      basis: "POSITION_MEAN",
     });
     expect(client.projectionCalls).toEqual(
       expect.arrayContaining([
@@ -163,6 +186,77 @@ describe("projection scoring service", () => {
         week: { lte: 18 },
       }),
     });
+  });
+
+  it("includes prior-season players without projections and sorts on blended values", async () => {
+    const client = fakePrisma({
+      seasonRows: [
+        {
+          externalPlayerId: "projected-qb",
+          source: "rotowire",
+          season: 2026,
+          week: 0,
+          position: "QB",
+          nflTeam: "KC",
+          yearsExp: 3,
+          stats: { pass_att: 100, pass_cmp: 0, pass_int: 0, pass_sack: 0 },
+        },
+      ],
+      players: [
+        {
+          externalPlayerId: "projected-qb",
+          fullName: "Projected QB",
+          position: "QB",
+          nflTeam: "KC",
+        },
+        {
+          externalPlayerId: "history-only",
+          fullName: "History Only",
+          position: "RB",
+          nflTeam: "CHI",
+        },
+      ],
+      historical: [
+        {
+          externalPlayerId: "history-only",
+          position: "RB",
+          _sum: {
+            pcNegativeCatches: 0,
+            pcNeutralCatches: 0,
+            pcSuccessfulCatches: 0,
+            pcExplosiveCatches: 0,
+            pcIncompleteTargets: 0,
+          },
+        },
+      ],
+      summaries: [historicalSummary("history-only", 6, 10)],
+      positionMeans: [{ position: "RB", perGame: 5 }],
+    });
+
+    const result = await getProjectedScores({
+      leagueId: "league-1",
+      season: 2026,
+      prismaClient: client,
+    });
+
+    expect(result.map((row) => row.externalPlayerId)).toEqual([
+      "projected-qb",
+      "history-only",
+    ]);
+    expect(result.find((row) => row.externalPlayerId === "history-only")).toMatchObject({
+      externalPlayerId: "history-only",
+      avgPoints: 5.56,
+      totalPoints: 94.52,
+      rawAvgPoints: null,
+      basis: "HISTORY",
+      confidence: "MEDIUM",
+    });
+    expect(result.find((row) => row.externalPlayerId === "projected-qb")).toMatchObject({
+      rawAvgPoints: expect.any(Number),
+      basis: "POSITION_MEAN",
+      confidence: "LOW",
+    });
+    expect(client.queryRawCallArgs).toHaveLength(2);
   });
 
   it("throws when league settings are missing", async () => {

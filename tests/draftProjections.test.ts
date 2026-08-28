@@ -123,6 +123,16 @@ const projectionRows = [
     yearsExp: 0,
     stats: {},
   },
+  {
+    externalPlayerId: "unknown",
+    source: "rotowire",
+    season: 2026,
+    week: 0,
+    position: null,
+    nflTeam: null,
+    yearsExp: null,
+    stats: {},
+  },
 ];
 
 const players = projectionRows.map((row) => ({
@@ -216,7 +226,7 @@ describe("draft projection helpers", () => {
       limit: 20,
       prismaClient: client,
     });
-    expect(all.players.at(-1)?.externalPlayerId).toBe("unprojected");
+    expect(all.players.at(-1)?.externalPlayerId).toBe("unknown");
   });
 
   it("attaches last-season summaries and nulls missing summaries", async () => {
@@ -244,6 +254,10 @@ describe("draft projection helpers", () => {
       projected: expect.objectContaining({
         totalPoints: expect.any(Number),
         coverage: expect.any(String),
+        rawTotalPoints: expect.any(Number),
+        rawAvgPoints: expect.any(Number),
+        basis: expect.any(String),
+        confidence: expect.any(String),
       }),
     });
     expect(result.players.find((player) => player.externalPlayerId === "kicker")).toMatchObject({

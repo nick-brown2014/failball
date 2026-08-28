@@ -24,6 +24,10 @@ type Ranking = {
     isRookie: boolean;
     estimatedFields: string[];
     unprojectedFields: string[];
+    rawTotalPoints: number | null;
+    rawAvgPoints: number | null;
+    basis: "BLEND" | "HISTORY" | "ADP" | "POSITION_MEAN" | "PROJECTION" | null;
+    confidence: "LOW" | "MEDIUM";
   } | null;
 };
 
@@ -91,7 +95,7 @@ export default function DraftRankingsPage() {
           </div>
         </div>
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Rookies and players without historical data can still have projections when the source provides them; a blank projection means the source has no usable projection.
+          Projected values blend last season&apos;s shrunk actual rate with a bias-corrected Rotowire projection at RB/WR/TE, and use history alone at QB/K/DEF where the projection carried no rank signal. Players without history fall back to a preseason ADP prior when available; a blank means neither history nor a usable projection is available. QB values are low confidence because no method ranked QBs in the 2024→2025 backtest.
         </div>
         <section className="mt-5 overflow-hidden rounded-lg bg-white shadow-lg dark:bg-gray-800">
           <div className="flex flex-wrap gap-3 border-b border-gray-200 p-4 dark:border-gray-700">
@@ -127,13 +131,22 @@ export default function DraftRankingsPage() {
                           <span className="px-4 py-3">{player.weeksPlayed ?? "—"}</span>
                           <span className="px-4 py-3">{player.totalPoints == null ? "—" : player.totalPoints.toFixed(2)}</span>
                           <span className="px-4 py-3">{player.avgPoints == null ? "—" : player.avgPoints.toFixed(2)}</span>
-                          <span className="px-4 py-3">{player.projected?.totalPoints == null ? "—" : player.projected.totalPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3">
+                            {player.projected?.totalPoints == null ? "—" : player.projected.totalPoints.toFixed(2)}
+                            {player.projected?.totalPoints != null && (player.projected.basis || player.projected.confidence === "LOW") && (
+                              <span className={`ml-1 text-[10px] lowercase ${player.projected.confidence === "LOW" ? "text-amber-700" : "text-gray-500"}`}>
+                                {player.projected.basis?.toLowerCase().replace("_", " ")}
+                                {player.projected.confidence === "LOW" ? " low" : ""}
+                              </span>
+                            )}
+                          </span>
                           <span className="px-4 py-3">{player.projected?.avgPoints == null ? "—" : player.projected.avgPoints.toFixed(2)}</span>
                           <span className="px-4 py-3 text-gray-500">{player.bestWeek == null ? "—" : `${player.bestWeek.toFixed(2)} / ${player.worstWeek?.toFixed(2)}`}</span>
                         </button>
                         {expanded === player.externalPlayerId && (
                           <div className="bg-gray-50 px-4 pb-4 pt-2 dark:bg-gray-900/40">
                             {player.weeklyPoints && <><div className="mb-2 text-xs font-semibold uppercase text-gray-500">Weekly points</div><div className="flex flex-wrap gap-2">{player.weeklyPoints.map((week) => <span key={week.week} className="rounded bg-white px-2 py-1 text-xs shadow-sm dark:bg-gray-800">W{week.week}: {week.points.toFixed(2)}</span>)}</div></>}
+                            {player.projected && <div className="mt-3 text-xs text-gray-500">Raw projection: {player.projected.rawAvgPoints == null ? "—" : `${player.projected.rawAvgPoints.toFixed(2)} / g`}</div>}
                             {player.projected?.estimatedFields.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Estimated from calibrated rates</div><div className="mt-1 text-xs text-gray-500">{player.projected.estimatedFields.join(", ")}</div></div> : null}
                             {player.projected?.unprojectedFields.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Not projected — charting only</div><div className="mt-1 text-xs text-gray-500">{player.projected.unprojectedFields.join(", ")}</div></div> : null}
                           </div>

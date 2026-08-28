@@ -6,6 +6,7 @@ import {
   YARDS_ALLOWED_FIELDS,
   type ScorableStats,
 } from "@/lib/scoring/computeScore";
+import { MIN_PRIOR_GAMES } from "@/lib/projections/blend";
 
 /** NFL regular seasons end after week 18; postseason rows remain available separately. */
 export const REGULAR_SEASON_LAST_WEEK = 18;
@@ -240,4 +241,44 @@ export async function getLastSeasonSummaries(
     GROUP BY "s"."externalPlayerId"
   `);
   return new Map(rows.map((row) => [row.externalPlayerId, row]));
+}
+
+export async function getPositionMeanPerGame(
+  season: number,
+  settings: Record<string, unknown>,
+  prismaClient: PrismaClient = prisma,
+): Promise<Map<string, number>> {
+  const score = scoreExpression(settings);
+  const rows = await prismaClient.$queryRaw<
+    Array<{ position: string | null; perGame: number | null }>
+  >(Prisma.sql`
+    WITH player_rates AS (
+      SELECT
+        COALESCE("p"."position", "s"."position") AS "position",
+        "s"."externalPlayerId",
+        SUM(${score}) / COUNT(*) AS "perGame"
+      FROM "public"."player_week_stats" "s"
+      LEFT JOIN "public"."players" "p"
+        ON "p"."externalPlayerId" = "s"."externalPlayerId"
+      WHERE "s"."season" = ${season}
+        AND "s"."week" <= ${REGULAR_SEASON_LAST_WEEK}
+        AND (
+          "p"."externalPlayerId" IS NOT NULL
+          OR "s"."externalPlayerId" LIKE 'DEF:%'
+          OR "s"."externalPlayerId" LIKE 'ST:%'
+        )
+      GROUP BY COALESCE("p"."position", "s"."position"), "s"."externalPlayerId"
+      HAVING COUNT(*) >= ${MIN_PRIOR_GAMES}
+    )
+    SELECT "position", AVG("perGame")::float8 AS "perGame"
+    FROM player_rates
+    GROUP BY "position"
+  `);
+  return new Map(
+    rows
+      .filter((row): row is { position: string; perGame: number } =>
+        row.position != null && row.perGame != null,
+      )
+      .map((row) => [row.position, row.perGame]),
+  );
 }
