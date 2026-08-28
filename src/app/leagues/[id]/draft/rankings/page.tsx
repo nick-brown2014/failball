@@ -10,13 +10,12 @@ type Ranking = {
   fullName: string;
   position: string | null;
   nflTeam: string | null;
-  weeksPlayed?: number;
+  weeksPlayed?: number | null;
   totalPoints?: number | null;
   avgPoints?: number | null;
   bestWeek?: number;
   worstWeek?: number;
   weeklyPoints?: Array<{ week: number; points: number }>;
-  lastSeason?: { totalPoints: number; avgPoints: number; weeksPlayed: number } | null;
   projected?: {
     totalPoints: number | null;
     avgPoints: number | null;
@@ -26,11 +25,6 @@ type Ranking = {
     estimatedFields: string[];
     unprojectedFields: string[];
   } | null;
-  games?: number;
-  coverage?: "PROJECTED" | "PARTIAL" | "UNPROJECTED";
-  isRookie?: boolean;
-  estimatedFields?: string[];
-  unprojectedFields?: string[];
 };
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "ST", "DEF"];
@@ -122,26 +116,26 @@ export default function DraftRankingsPage() {
                         <button onClick={() => setExpanded(expanded === player.externalPlayerId ? null : player.externalPlayerId)} className="grid w-full grid-cols-[minmax(12rem,2fr)_4rem_5rem_6rem_6rem_6rem_6rem_8rem] items-center text-left hover:bg-gray-50 dark:hover:bg-gray-700/40">
                           <span className="px-4 py-3 font-medium">
                             {player.fullName}<span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
-                            {(sort === "projected" ? player : player.projected) && (
+                            {player.projected && (
                               <span className="ml-2 inline-flex items-center gap-1 text-[10px] uppercase text-gray-500">
-                                {(sort === "projected" ? player : player.projected)?.isRookie && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Rookie</span>}
-                                <span>{(sort === "projected" ? player : player.projected)?.coverage?.toLowerCase()}</span>
+                                {player.projected.isRookie && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Rookie</span>}
+                                <span>{player.projected.coverage.toLowerCase()}</span>
                               </span>
                             )}
                           </span>
                           <span className="px-4 py-3 text-gray-500">{player.position || "—"}</span>
-                          <span className="px-4 py-3">{sort === "projected" ? (player.lastSeason?.weeksPlayed ?? "—") : (player.weeksPlayed ?? "—")}</span>
-                          <span className="px-4 py-3">{sort === "projected" ? (player.lastSeason ? player.lastSeason.totalPoints.toFixed(2) : "—") : (player.totalPoints == null ? "—" : player.totalPoints.toFixed(2))}</span>
-                          <span className="px-4 py-3">{sort === "projected" ? (player.lastSeason ? player.lastSeason.avgPoints.toFixed(2) : "—") : (player.avgPoints == null ? "—" : player.avgPoints.toFixed(2))}</span>
-                          <span className="px-4 py-3">{(sort === "projected" ? player : player.projected)?.totalPoints == null ? "—" : (sort === "projected" ? player : player.projected)?.totalPoints?.toFixed(2)}</span>
-                          <span className="px-4 py-3">{(sort === "projected" ? player : player.projected)?.avgPoints == null ? "—" : (sort === "projected" ? player : player.projected)?.avgPoints?.toFixed(2)}</span>
-                          <span className="px-4 py-3 text-gray-500">{sort === "projected" || player.bestWeek == null ? "—" : `${player.bestWeek.toFixed(2)} / ${player.worstWeek?.toFixed(2)}`}</span>
+                          <span className="px-4 py-3">{player.weeksPlayed ?? "—"}</span>
+                          <span className="px-4 py-3">{player.totalPoints == null ? "—" : player.totalPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3">{player.avgPoints == null ? "—" : player.avgPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3">{player.projected?.totalPoints == null ? "—" : player.projected.totalPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3">{player.projected?.avgPoints == null ? "—" : player.projected.avgPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3 text-gray-500">{player.bestWeek == null ? "—" : `${player.bestWeek.toFixed(2)} / ${player.worstWeek?.toFixed(2)}`}</span>
                         </button>
                         {expanded === player.externalPlayerId && (
                           <div className="bg-gray-50 px-4 pb-4 pt-2 dark:bg-gray-900/40">
                             {player.weeklyPoints && <><div className="mb-2 text-xs font-semibold uppercase text-gray-500">Weekly points</div><div className="flex flex-wrap gap-2">{player.weeklyPoints.map((week) => <span key={week.week} className="rounded bg-white px-2 py-1 text-xs shadow-sm dark:bg-gray-800">W{week.week}: {week.points.toFixed(2)}</span>)}</div></>}
-                            {(sort === "projected" ? player : player.projected)?.estimatedFields?.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Estimated from calibrated rates</div><div className="mt-1 text-xs text-gray-500">{(sort === "projected" ? player : player.projected)?.estimatedFields?.join(", ")}</div></div> : null}
-                            {(sort === "projected" ? player : player.projected)?.unprojectedFields?.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Not projected — charting only</div><div className="mt-1 text-xs text-gray-500">{(sort === "projected" ? player : player.projected)?.unprojectedFields?.join(", ")}</div></div> : null}
+                            {player.projected?.estimatedFields.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Estimated from calibrated rates</div><div className="mt-1 text-xs text-gray-500">{player.projected.estimatedFields.join(", ")}</div></div> : null}
+                            {player.projected?.unprojectedFields.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Not projected — charting only</div><div className="mt-1 text-xs text-gray-500">{player.projected.unprojectedFields.join(", ")}</div></div> : null}
                           </div>
                         )}
                       </td>

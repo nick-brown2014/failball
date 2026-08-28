@@ -176,7 +176,8 @@ describe("projection translation", () => {
     expect(translated.perGame.defYardsAllowedBucket).toBe(
       projectedYardsAllowedBucket(350),
     );
-    expect(translated.unprojectedFields).toEqual(["stPuntsBlocked", "stOnsideKickFails"]);
+    expect(Object.keys(translated.perGame).filter((field) => field.startsWith("st"))).toEqual([]);
+    expect(translated.unprojectedFields).toEqual([]);
   });
 
   it("uses the projection grain to determine games and marks empty stats unprojected", () => {

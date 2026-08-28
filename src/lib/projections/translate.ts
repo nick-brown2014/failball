@@ -397,10 +397,10 @@ function translateKicker(input: TranslateInput, games: number): TranslatedProjec
 }
 
 /**
- * Team defense/special-teams units. Sources project points allowed rather than
- * the touchdowns, field goals, and yardage bucket Failball scores, so those come
- * from the fitted points-allowed relationships, and the return/kick items no
- * source publishes come from league per-game rates.
+ * Team defense units. Sources project points allowed rather than the touchdowns,
+ * field goals, and yardage bucket Failball scores, so those come from the fitted
+ * points-allowed relationships. Special-teams fields belong to a separate unit
+ * and are intentionally not assigned to DEF projections.
  */
 function translateTeamDefense(input: TranslateInput, games: number): TranslatedProjection {
   const { stats, weeklyReference } = input;
@@ -460,24 +460,12 @@ function translateTeamDefense(input: TranslateInput, games: number): TranslatedP
     estimatedFields.push("defTouchdownsAllowed", "defFieldGoalsAllowed", "defYardsAllowedBucket");
   }
 
-  // Return and kick coverage items: no conventional source projects them, so
-  // every defense/special-teams unit gets the league per-game rate.
-  perGame.stKickoffReturnTds = TEAM_PER_GAME_RATES.stKickoffReturnTds;
-  perGame.stKickoffMuffed = TEAM_PER_GAME_RATES.stKickoffMuffed;
-  perGame.stKickoffStuffed = TEAM_PER_GAME_RATES.stKickoffStuffed;
-  perGame.stPuntReturnTds = TEAM_PER_GAME_RATES.stPuntReturnTds;
-  perGame.stPuntMuffed = TEAM_PER_GAME_RATES.stPuntMuffed;
-  perGame.stPuntStuffed = TEAM_PER_GAME_RATES.stPuntStuffed;
-  perGame.stPuntTouchbacks = TEAM_PER_GAME_RATES.stPuntTouchbacks;
-  perGame.stPenaltiesExtendDrive = TEAM_PER_GAME_RATES.stPenaltiesExtendDrive;
-  estimatedFields.push("specialTeamsReturnItems");
-
   const hasVolume = positive(num(stats, "sack")) > 0 || positive(num(stats, "int")) > 0;
   return {
     perGame,
     games,
     coverage: hasVolume ? "PARTIAL" : "UNPROJECTED",
-    unprojectedFields: ["stPuntsBlocked", "stOnsideKickFails"],
+    unprojectedFields: [],
     estimatedFields,
   };
 }

@@ -101,10 +101,12 @@ export async function GET(
           includePostseason,
         )
       : new Map();
-    const projectedPlayers = await attachProjections(players, {
-      leagueId: id,
-      season: league?.season ?? new Date().getUTCFullYear(),
-    });
+    const projectedPlayers = settings
+      ? await attachProjections(players, {
+          leagueId: id,
+          season: league?.season ?? new Date().getUTCFullYear(),
+        })
+      : players.map((player) => ({ ...player, projected: null }));
     const draftedIds = new Set(
       draft
         ? (

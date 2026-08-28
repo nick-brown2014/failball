@@ -237,13 +237,21 @@ describe("draft projection helpers", () => {
       season: 2026,
       prismaClient: client,
     });
-    expect(result.players.find((player) => player.externalPlayerId === "qb")?.lastSeason).toEqual({
-      externalPlayerId: "qb",
+    expect(result.players.find((player) => player.externalPlayerId === "qb")).toMatchObject({
+      weeksPlayed: 10,
       totalPoints: 12.5,
       avgPoints: 1.25,
-      weeksPlayed: 10,
+      projected: expect.objectContaining({
+        totalPoints: expect.any(Number),
+        coverage: expect.any(String),
+      }),
     });
-    expect(result.players.find((player) => player.externalPlayerId === "kicker")?.lastSeason).toBeNull();
+    expect(result.players.find((player) => player.externalPlayerId === "kicker")).toMatchObject({
+      weeksPlayed: null,
+      totalPoints: null,
+      avgPoints: null,
+      projected: expect.any(Object),
+    });
   });
 
   it("returns null projection entries when no projection rows exist", async () => {

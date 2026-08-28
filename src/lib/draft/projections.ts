@@ -6,8 +6,15 @@ import {
   type ProjectedPlayerScore,
 } from "@/lib/projections/service";
 
-export interface ProjectedRanking extends ProjectedPlayerScore {
-  lastSeason: { totalPoints: number; avgPoints: number; weeksPlayed: number } | null;
+export interface ProjectedRanking {
+  externalPlayerId: string;
+  fullName: string;
+  position: string | null;
+  nflTeam: string | null;
+  weeksPlayed: number | null;
+  totalPoints: number | null;
+  avgPoints: number | null;
+  projected: ProjectionSummary;
 }
 
 export interface ProjectionSummary {
@@ -98,10 +105,27 @@ export async function getProjectedRankings(options: {
     page: currentPage,
     limit: pageSize,
     total: filtered.length,
-    players: pagePlayers.map((player) => ({
-      ...player,
-      lastSeason: summaries.get(player.externalPlayerId) ?? null,
-    })),
+    players: pagePlayers.map((player) => {
+      const lastSeason = summaries.get(player.externalPlayerId);
+      return {
+        externalPlayerId: player.externalPlayerId,
+        fullName: player.fullName,
+        position: player.position,
+        nflTeam: player.nflTeam,
+        weeksPlayed: lastSeason?.weeksPlayed ?? null,
+        totalPoints: lastSeason?.totalPoints ?? null,
+        avgPoints: lastSeason?.avgPoints ?? null,
+        projected: {
+          totalPoints: player.totalPoints,
+          avgPoints: player.avgPoints,
+          games: player.games,
+          coverage: player.coverage,
+          isRookie: player.isRookie,
+          estimatedFields: player.estimatedFields,
+          unprojectedFields: player.unprojectedFields,
+        },
+      };
+    }),
   };
 }
 
