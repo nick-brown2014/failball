@@ -269,7 +269,6 @@ export async function getPositionMeanPerGame(
         AND (
           "p"."externalPlayerId" IS NOT NULL
           OR "s"."externalPlayerId" LIKE 'DEF:%'
-          OR "s"."externalPlayerId" LIKE 'ST:%'
         )
       GROUP BY
         CASE
