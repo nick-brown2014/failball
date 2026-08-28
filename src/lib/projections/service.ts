@@ -73,6 +73,7 @@ export async function getProjectedScores(options: {
   source?: string;
   externalPlayerIds?: string[];
   prismaClient?: PrismaClient;
+  leagueSettings?: Record<string, unknown>;
 }): Promise<ProjectedPlayerScore[]> {
   const {
     leagueId,
@@ -80,10 +81,13 @@ export async function getProjectedScores(options: {
     source = "rotowire",
     externalPlayerIds,
     prismaClient = prisma,
+    leagueSettings,
   } = options;
-  const settings = await prismaClient.leagueSettings.findUnique({
-    where: { leagueId },
-  });
+  const settings =
+    leagueSettings ??
+    (await prismaClient.leagueSettings.findUnique({
+      where: { leagueId },
+    }));
   if (!settings) throw new Error("League settings not found");
 
   if (externalPlayerIds?.length === 0) return [];

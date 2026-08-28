@@ -20,6 +20,10 @@ type DraftPlayer = {
     avgPoints: number;
     weeksPlayed: number;
   } | null;
+  projected?: {
+    totalPoints: number | null;
+    avgPoints: number | null;
+  } | null;
 };
 
 type DraftState = {
@@ -349,9 +353,18 @@ export default function DraftPage() {
                         <span className="font-medium">{player.fullName}</span>
                         <span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
                         <span className="ml-3 text-xs text-gray-500">
-                          {player.lastSeason
-                            ? `${player.lastSeason.totalPoints.toFixed(2)} pts · ${player.lastSeason.avgPoints.toFixed(2)} avg`
-                            : `No ${lastSeason ?? fallbackLastSeason} data`}
+                          <span className="block">
+                            <span className="block">
+                              {player.lastSeason
+                                ? `${player.lastSeason.totalPoints.toFixed(2)} pts · ${player.lastSeason.avgPoints.toFixed(2)} avg`
+                                : `No ${lastSeason ?? fallbackLastSeason} data`}
+                            </span>
+                            <span className="block text-xs text-gray-500">
+                              {player.projected?.totalPoints == null
+                                ? "— proj"
+                                : `${player.projected.totalPoints.toFixed(2)} proj`}
+                            </span>
+                          </span>
                         </span>
                       </span>
                       <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">{player.position}</span>

@@ -6,6 +6,7 @@ import { publishDraftPick } from "@/lib/draft/events";
 import { settleExpiredDraftPicks } from "@/lib/draft/service";
 import { getDraftMember } from "@/lib/draft/state";
 import { getLastSeasonSummaries } from "@/lib/draft/history";
+import { attachProjections } from "@/lib/draft/projections";
 import { getLastSeason } from "@/lib/draft/season";
 import prisma from "@/lib/prisma";
 
@@ -47,8 +48,8 @@ export async function GET(
     );
     // PostgreSQL enum ordering is QB, RB, WR, TE, ST, DEF, FLEX, matching DRAFT_POSITION_ORDER.
     const positionFilter =
-      position && Object.values(Position).includes(position as Position)
-        ? (position as Position)
+      position && [...Object.values(Position), "K"].includes(position)
+        ? (position === "K" ? Position.ST : position as Position)
         : null;
     const includePostseason = ["1", "true"].includes(
       request.nextUrl.searchParams.get("includePostseason")?.toLowerCase() ?? "",
@@ -84,8 +85,8 @@ export async function GET(
           ...(q
             ? { fullName: { contains: q, mode: "insensitive" } }
             : {}),
-          ...(position && Object.values(Position).includes(position as Position)
-            ? { position: position as Position }
+          ...(position && [...Object.values(Position), "K"].includes(position)
+            ? { position: position === "K" ? Position.ST : position as Position }
             : {}),
         },
       }),
@@ -100,6 +101,10 @@ export async function GET(
           includePostseason,
         )
       : new Map();
+    const projectedPlayers = await attachProjections(players, {
+      leagueId: id,
+      season: league?.season ?? new Date().getUTCFullYear(),
+    });
     const draftedIds = new Set(
       draft
         ? (
@@ -111,7 +116,7 @@ export async function GET(
         : [],
     );
     return NextResponse.json({
-      players: players.map((player) => ({
+      players: projectedPlayers.map((player) => ({
         ...player,
         drafted: draftedIds.has(player.externalPlayerId),
         lastSeason: summaries.get(player.externalPlayerId) ?? null,
