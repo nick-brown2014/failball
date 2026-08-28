@@ -254,7 +254,10 @@ export async function getPositionMeanPerGame(
   >(Prisma.sql`
     WITH player_rates AS (
       SELECT
-        COALESCE("p"."position", "s"."position") AS "position",
+        CASE
+          WHEN "s"."externalPlayerId" LIKE 'DEF:%' THEN 'DEF'
+          ELSE COALESCE("p"."position"::text, "s"."position"::text)
+        END AS "position",
         "s"."externalPlayerId",
         SUM(${score}) / COUNT(*) AS "perGame"
       FROM "public"."player_week_stats" "s"
@@ -262,12 +265,18 @@ export async function getPositionMeanPerGame(
         ON "p"."externalPlayerId" = "s"."externalPlayerId"
       WHERE "s"."season" = ${season}
         AND "s"."week" <= ${REGULAR_SEASON_LAST_WEEK}
+        AND "s"."externalPlayerId" NOT LIKE 'ST:%'
         AND (
           "p"."externalPlayerId" IS NOT NULL
           OR "s"."externalPlayerId" LIKE 'DEF:%'
           OR "s"."externalPlayerId" LIKE 'ST:%'
         )
-      GROUP BY COALESCE("p"."position", "s"."position"), "s"."externalPlayerId"
+      GROUP BY
+        CASE
+          WHEN "s"."externalPlayerId" LIKE 'DEF:%' THEN 'DEF'
+          ELSE COALESCE("p"."position"::text, "s"."position"::text)
+        END,
+        "s"."externalPlayerId"
       HAVING COUNT(*) >= ${MIN_PRIOR_GAMES}
     )
     SELECT "position", AVG("perGame")::float8 AS "perGame"
@@ -279,6 +288,9 @@ export async function getPositionMeanPerGame(
       .filter((row): row is { position: string; perGame: number } =>
         row.position != null && row.perGame != null,
       )
-      .map((row) => [row.position, row.perGame]),
+      .map((row) => [
+        row.position.toUpperCase() === "K" ? "ST" : row.position.toUpperCase(),
+        row.perGame,
+      ]),
   );
 }

@@ -51,10 +51,10 @@ describe("projection blending", () => {
         positionMeanPerGame: null,
         adp: 100,
       }),
-    ).toEqual({ perGame: 9.98, basis: "POSITION_MEAN", confidence: "LOW" });
+    ).toEqual({ perGame: null, basis: null, confidence: "LOW" });
   });
 
-  it("falls back to a position mean and preserves unavailable values", () => {
+  it("uses a position mean as a low-confidence blend anchor", () => {
     expect(
       blendProjection({
         position: "RB",
@@ -64,7 +64,20 @@ describe("projection blending", () => {
         positionMeanPerGame: null,
         adp: null,
       }),
-    ).toEqual({ perGame: 5.543, basis: "BLEND", confidence: "MEDIUM" });
+    ).toEqual({ perGame: 5.543, basis: "BLEND", confidence: "LOW" });
+  });
+
+  it("preserves unavailable values", () => {
+    expect(
+      blendProjection({
+        position: "QB",
+        projectedPerGame: null,
+        priorAvgPoints: null,
+        priorWeeks: null,
+        positionMeanPerGame: null,
+        adp: null,
+      }),
+    ).toEqual({ perGame: null, basis: null, confidence: "LOW" });
     expect(
       blendProjection({
         position: null,

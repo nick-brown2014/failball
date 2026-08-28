@@ -78,8 +78,7 @@ export type ProjectionBasis =
   | "BLEND"
   | "HISTORY"
   | "ADP"
-  | "POSITION_MEAN"
-  | "PROJECTION";
+  | "POSITION_MEAN";
 export type ProjectionConfidence = "LOW" | "MEDIUM";
 
 export interface BlendInput {
@@ -147,12 +146,9 @@ export function blendProjection(input: BlendInput): BlendResult {
   if (history != null && adjusted != null) {
     perGame = history * (1 - blendWeight) + adjusted * blendWeight;
     basis = "BLEND";
-  } else if (history != null) {
+  } else if (history != null && historyBasis !== "POSITION_MEAN") {
     perGame = history;
     basis = historyBasis;
-  } else if (adjusted != null) {
-    perGame = adjusted;
-    basis = "PROJECTION";
   } else {
     perGame = null;
     basis = null;
@@ -161,8 +157,7 @@ export function blendProjection(input: BlendInput): BlendResult {
   const confidence: ProjectionConfidence =
     basis == null ||
     basis === "ADP" ||
-    basis === "POSITION_MEAN" ||
-    basis === "PROJECTION" ||
+    (basis === "BLEND" && historyBasis === "POSITION_MEAN") ||
     (POSITION_RANK_CORRELATION[position ?? ""] ?? 0) < LOW_CONFIDENCE_RHO
       ? "LOW"
       : "MEDIUM";

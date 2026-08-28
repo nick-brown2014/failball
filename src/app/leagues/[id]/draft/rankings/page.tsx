@@ -26,7 +26,7 @@ type Ranking = {
     unprojectedFields: string[];
     rawTotalPoints: number | null;
     rawAvgPoints: number | null;
-    basis: "BLEND" | "HISTORY" | "ADP" | "POSITION_MEAN" | "PROJECTION" | null;
+    basis: "BLEND" | "HISTORY" | "ADP" | "POSITION_MEAN" | null;
     confidence: "LOW" | "MEDIUM";
   } | null;
 };

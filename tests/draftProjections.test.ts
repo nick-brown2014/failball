@@ -226,7 +226,7 @@ describe("draft projection helpers", () => {
       limit: 20,
       prismaClient: client,
     });
-    expect(all.players.at(-1)?.externalPlayerId).toBe("unknown");
+    expect(all.players.at(-1)?.externalPlayerId).toBe("unprojected");
   });
 
   it("attaches last-season summaries and nulls missing summaries", async () => {
@@ -252,11 +252,11 @@ describe("draft projection helpers", () => {
       totalPoints: 12.5,
       avgPoints: 1.25,
       projected: expect.objectContaining({
-        totalPoints: expect.any(Number),
+        totalPoints: null,
         coverage: expect.any(String),
         rawTotalPoints: expect.any(Number),
         rawAvgPoints: expect.any(Number),
-        basis: expect.any(String),
+        basis: null,
         confidence: expect.any(String),
       }),
     });

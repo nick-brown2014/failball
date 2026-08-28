@@ -93,6 +93,16 @@ function applicationPosition(position: string | null | undefined): string | null
   return normalized === "K" ? "ST" : normalized;
 }
 
+function applicationPlayerId(externalPlayerId: string): string {
+  return externalPlayerId.startsWith("DEF:")
+    ? externalPlayerId.slice("DEF:".length)
+    : externalPlayerId;
+}
+
+function isTeamSpecialTeams(externalPlayerId: string): boolean {
+  return externalPlayerId.startsWith("ST:");
+}
+
 export async function getProjectedScores(options: {
   leagueId: string;
   season: number;
@@ -118,7 +128,15 @@ export async function getProjectedScores(options: {
 
   if (externalPlayerIds?.length === 0) return [];
   const idFilter = externalPlayerIds ? { externalPlayerId: { in: externalPlayerIds } } : {};
-  const priorIdFilter = externalPlayerIds ? { externalPlayerId: { in: externalPlayerIds } } : {};
+  const priorIdFilter = externalPlayerIds
+    ? {
+        externalPlayerId: {
+          in: externalPlayerIds.flatMap((id) =>
+            id.startsWith("DEF:") ? [id, id.slice("DEF:".length)] : [id, `DEF:${id}`],
+          ),
+        },
+      }
+    : {};
   const [seasonRows, weekRows, priorRows, positionMeans] = await Promise.all([
     prismaClient.playerProjection.findMany({
       where: { source, season, week: 0, ...idFilter },
@@ -151,7 +169,9 @@ export async function getProjectedScores(options: {
   const weeklyById = new Map(
     (weekRows as ProjectionRow[]).map((row) => [row.externalPlayerId, row]),
   );
-  const historicalRows = priorRows as HistoricalCatchRow[];
+  const historicalRows = (priorRows as HistoricalCatchRow[]).filter(
+    (row) => !isTeamSpecialTeams(row.externalPlayerId),
+  );
   const priorIds = historicalRows.map((row) => row.externalPlayerId);
   const priorSummaries = await getLastSeasonSummaries(
     priorIds,
@@ -160,7 +180,19 @@ export async function getProjectedScores(options: {
     false,
     prismaClient,
   );
-  const ids = [...new Set([...rows.map((row) => row.externalPlayerId), ...priorSummaries.keys()])];
+  const priorIdSet = new Set(priorIds);
+  const summariesForPriorRows = [...priorSummaries.entries()].filter(([id]) =>
+    priorIdSet.has(id),
+  );
+  const rowsWithoutTeamSpecialTeams = rows.filter(
+    (row) => !isTeamSpecialTeams(row.externalPlayerId),
+  );
+  const ids = [
+    ...new Set([
+      ...rowsWithoutTeamSpecialTeams.map((row) => row.externalPlayerId),
+      ...summariesForPriorRows.map(([id]) => applicationPlayerId(id)),
+    ]),
+  ];
   const players = ids.length
     ? await prismaClient.player.findMany({
         where: { externalPlayerId: { in: ids } },
@@ -178,10 +210,16 @@ export async function getProjectedScores(options: {
   const historicalById = new Map<string, HistoricalCatchRow>();
   const positionById = new Map<string, string | null>();
   for (const row of historicalRows) {
-    historicalById.set(row.externalPlayerId, row);
-    positionById.set(row.externalPlayerId, row.position ?? null);
+    const id = applicationPlayerId(row.externalPlayerId);
+    historicalById.set(id, { ...row, externalPlayerId: id });
+    positionById.set(id, row.externalPlayerId.startsWith("DEF:") ? "DEF" : row.position ?? null);
   }
-  const projectionsById = new Map(rows.map((row) => [row.externalPlayerId, row]));
+  const projectionsById = new Map(
+    rowsWithoutTeamSpecialTeams.map((row) => [applicationPlayerId(row.externalPlayerId), row]),
+  );
+  const summariesById = new Map(
+    summariesForPriorRows.map(([id, summary]) => [applicationPlayerId(id), summary]),
+  );
 
   const projected = ids.map((id) => {
     const row = projectionsById.get(id);
@@ -229,8 +267,8 @@ export async function getProjectedScores(options: {
     const blend = blendProjection({
       position,
       projectedPerGame: rawAvgPoints,
-      priorAvgPoints: priorSummaries.get(id)?.avgPoints ?? null,
-      priorWeeks: priorSummaries.get(id)?.weeksPlayed ?? null,
+      priorAvgPoints: summariesById.get(id)?.avgPoints ?? null,
+      priorWeeks: summariesById.get(id)?.weeksPlayed ?? null,
       positionMeanPerGame: position ? positionMeans.get(position) ?? null : null,
       adp: row ? numericStats(row.stats).adp_half_ppr ?? null : null,
     });

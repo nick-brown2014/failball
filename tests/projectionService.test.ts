@@ -148,16 +148,16 @@ describe("projection scoring service", () => {
     });
 
     expect(result.map((row) => row.externalPlayerId)).toEqual([
+      "wr-rookie",
       "qb-high",
       "no-projection",
-      "wr-rookie",
     ]);
     expect(result.find((row) => row.externalPlayerId === "qb-high")).toMatchObject({
-      totalPoints: 169.66,
-      avgPoints: 9.98,
+      totalPoints: null,
+      avgPoints: null,
       rawTotalPoints: 99.96,
       rawAvgPoints: expect.closeTo(100 / 17, 2),
-      basis: "POSITION_MEAN",
+      basis: null,
       confidence: "LOW",
     });
     expect(result.find((row) => row.externalPlayerId === "wr-rookie")).toMatchObject({
@@ -165,14 +165,15 @@ describe("projection scoring service", () => {
       nflTeam: "NYG",
       isRookie: true,
       basis: "BLEND",
-      confidence: "MEDIUM",
+      confidence: "LOW",
     });
     expect(result.find((row) => row.externalPlayerId === "wr-rookie")?.estimatedFields).toContain(
       "pcIncompleteTargets",
     );
     expect(result.find((row) => row.externalPlayerId === "no-projection")).toMatchObject({
-      totalPoints: 169.66,
-      basis: "POSITION_MEAN",
+      totalPoints: null,
+      avgPoints: null,
+      basis: null,
     });
     expect(client.projectionCalls).toEqual(
       expect.arrayContaining([
@@ -240,8 +241,8 @@ describe("projection scoring service", () => {
     });
 
     expect(result.map((row) => row.externalPlayerId)).toEqual([
-      "projected-qb",
       "history-only",
+      "projected-qb",
     ]);
     expect(result.find((row) => row.externalPlayerId === "history-only")).toMatchObject({
       externalPlayerId: "history-only",
@@ -253,7 +254,7 @@ describe("projection scoring service", () => {
     });
     expect(result.find((row) => row.externalPlayerId === "projected-qb")).toMatchObject({
       rawAvgPoints: expect.any(Number),
-      basis: "POSITION_MEAN",
+      basis: null,
       confidence: "LOW",
     });
     expect(client.queryRawCallArgs).toHaveLength(2);
@@ -268,5 +269,80 @@ describe("projection scoring service", () => {
         prismaClient: client,
       }),
     ).rejects.toThrow("League settings not found");
+  });
+
+  it("normalizes defense history and excludes team special-teams units", async () => {
+    const client = fakePrisma({
+      seasonRows: [
+        {
+          externalPlayerId: "ARI",
+          source: "rotowire",
+          season: 2026,
+          week: 0,
+          position: "DEF",
+          nflTeam: "ARI",
+          yearsExp: null,
+          stats: {},
+        },
+      ],
+      players: [
+        {
+          externalPlayerId: "ARI",
+          fullName: "Arizona Cardinals",
+          position: "DEF",
+          nflTeam: "ARI",
+        },
+      ],
+      historical: [
+        {
+          externalPlayerId: "DEF:ARI",
+          position: null,
+          _sum: {
+            pcNegativeCatches: 0,
+            pcNeutralCatches: 0,
+            pcSuccessfulCatches: 0,
+            pcExplosiveCatches: 0,
+            pcIncompleteTargets: 0,
+          },
+        },
+        {
+          externalPlayerId: "ST:ARI",
+          position: "ST",
+          _sum: {
+            pcNegativeCatches: 0,
+            pcNeutralCatches: 0,
+            pcSuccessfulCatches: 0,
+            pcExplosiveCatches: 0,
+            pcIncompleteTargets: 0,
+          },
+        },
+      ],
+      summaries: [
+        historicalSummary("DEF:ARI", 10, 10),
+        historicalSummary("ST:ARI", 8, 10),
+      ],
+      positionMeans: [{ position: "DEF", perGame: 6.9 }],
+    });
+
+    const result = await getProjectedScores({
+      leagueId: "league-1",
+      season: 2026,
+      prismaClient: client,
+    });
+
+    expect(result.filter((row) => row.position === "DEF")).toHaveLength(1);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalPlayerId: "ARI",
+          position: "DEF",
+          fullName: "Arizona Cardinals",
+          basis: "HISTORY",
+          avgPoints: 8.62,
+        }),
+      ]),
+    );
+    expect(result.some((row) => row.externalPlayerId === "DEF:ARI")).toBe(false);
+    expect(result.some((row) => row.externalPlayerId === "ST:ARI")).toBe(false);
   });
 });
