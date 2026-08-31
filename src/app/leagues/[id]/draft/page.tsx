@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Navigation from "@/components/Navigation";
 import PlayerDetailPanel from "@/components/draft/PlayerDetailPanel";
+import { resolveDraftOrder } from "@/lib/draft/order";
 import type { DraftLeagueSettings } from "@/lib/draft/types";
 import { useDraftStream } from "@/lib/realtime/useDraftStream";
 
@@ -59,6 +60,7 @@ type DraftState = {
     teamId: string;
     teamName: string;
     ownerName: string;
+    autopickEnabled: boolean;
   }>;
   picks: Array<{
     id: string;
@@ -88,6 +90,12 @@ type DraftState = {
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "ST", "DEF"];
 
+const SORT_OPTIONS = [
+  { value: "projected", label: "Highest projection" },
+  { value: "lastSeason", label: "Last season points" },
+  { value: "name", label: "Position / Name" },
+];
+
 export default function DraftPage() {
   const params = useParams<{ id: string }>();
   const leagueId = params.id;
@@ -95,12 +103,14 @@ export default function DraftPage() {
   const [players, setPlayers] = useState<DraftPlayer[]>([]);
   const [selected, setSelected] = useState<DraftPlayer | null>(null);
   const [position, setPosition] = useState("ALL");
+  const [sort, setSort] = useState("projected");
   const [query, setQuery] = useState("");
   const [playerPage, setPlayerPage] = useState(1);
   const [playerTotal, setPlayerTotal] = useState(0);
   const [lastSeason, setLastSeason] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState("");
   const [seconds, setSeconds] = useState(0);
   const expiredDeadline = useRef<string | null>(null);
@@ -144,6 +154,7 @@ export default function DraftPage() {
     const search = new URLSearchParams({
       q: query,
       position: position === "ALL" ? "" : position,
+      sort,
       limit: "60",
       page: String(page),
     });
@@ -157,7 +168,7 @@ export default function DraftPage() {
       setPlayerTotal(data.total);
       setLastSeason(data.season);
     }
-  }, [leagueId, position, query, state?.draft?.status]);
+  }, [leagueId, position, query, sort, state?.draft?.status]);
 
   useEffect(() => {
     setPlayerPage(1);
@@ -216,6 +227,20 @@ export default function DraftPage() {
     });
   const draftAction = (action: string) =>
     request("PATCH", `/api/leagues/${leagueId}/draft`, { action });
+  const updatePickClock = () =>
+    request("PATCH", `/api/leagues/${leagueId}/draft`, {
+      action: "update-settings",
+      secondsPerPick: settings.secondsPerPick,
+    });
+
+  const myOrderEntry = state?.order.find(
+    (entry) => entry.teamId === state?.callerTeamId,
+  );
+  const toggleAutopick = () =>
+    request("PATCH", `/api/leagues/${leagueId}/draft`, {
+      action: "set-autopick",
+      enabled: !myOrderEntry?.autopickEnabled,
+    });
 
   const makePick = async () => {
     if (!selected) return;
@@ -229,6 +254,34 @@ export default function DraftPage() {
       await fetchPlayers(1);
     }
   };
+
+  const allPicks = useMemo(() => {
+    const draft = state?.draft;
+    const order = state?.order ?? [];
+    if (!draft || order.length === 0) return [];
+    const teamsByPosition = new Map(order.map((entry) => [entry.position, entry]));
+    const picksByNumber = new Map(state.picks.map((pick) => [pick.pickNumber, pick]));
+    return Array.from({ length: draft.totalRounds * order.length }, (_, index) => {
+      const pickNumber = index + 1;
+      const resolution = resolveDraftOrder(pickNumber, order.length, draft.draftType);
+      return {
+        pickNumber,
+        round: resolution.round,
+        pickInRound: resolution.pickInRound,
+        team: teamsByPosition.get(resolution.orderPosition) ?? null,
+        pick: picksByNumber.get(pickNumber) ?? null,
+      };
+    });
+  }, [state?.draft, state?.order, state?.picks]);
+
+  const currentPickRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    currentPickRef.current?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [state?.draft?.currentPick, allPicks.length]);
 
   const isCommissioner = state?.member?.role === "COMMISSIONER";
   const isYourTurn =
@@ -304,14 +357,205 @@ export default function DraftPage() {
         ) : state.draft.status === "COMPLETED" ? (
           <CompletedBoard state={state} />
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr_1fr]">
+          <div className="space-y-6">
             {state.draft.status === "PAUSED" && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 lg:col-span-3">
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
                 <div className="font-semibold">Draft paused</div>
                 <div className="mt-1 text-sm">Pick actions are disabled until the commissioner resumes the draft.</div>
               </div>
             )}
-            <section className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800">
+
+            <section className="rounded-lg bg-gray-900 p-4 text-white shadow-lg">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+                <div className="flex flex-wrap items-center gap-4 xl:shrink-0">
+                  <div className="w-24 text-center text-4xl font-black tabular-nums text-orange-300">{seconds}s</div>
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-wider text-orange-300">On the clock</p>
+                    <h2 className="truncate text-xl font-bold">
+                      {state.onClock?.teamName || "Waiting"}
+                      {state.order.find((entry) => entry.teamId === state.onClock?.teamId)?.autopickEnabled && (
+                        <span className="ml-2 rounded bg-amber-500 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase text-gray-900">Auto</span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-gray-300">
+                      Round {state.draft.currentRound} · Pick {state.draft.currentPick}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={!isYourTurn || !selected || busy || state.draft.status === "PAUSED"}
+                      onClick={makePick}
+                      className="rounded bg-orange-600 px-4 py-2 text-sm font-bold hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {isYourTurn ? (selected ? `Draft ${selected.fullName}` : "Select a player") : "Waiting for your turn"}
+                    </button>
+                    {myOrderEntry && (
+                      <button
+                        disabled={busy}
+                        onClick={() => void toggleAutopick()}
+                        className={`rounded px-3 py-2 text-xs font-semibold disabled:opacity-50 ${
+                          myOrderEntry.autopickEnabled
+                            ? "bg-amber-500 text-gray-900 hover:bg-amber-400"
+                            : "border border-gray-500 hover:bg-gray-800"
+                        }`}
+                      >
+                        Autopick: {myOrderEntry.autopickEnabled ? "On" : "Off"}
+                      </button>
+                    )}
+                    {isCommissioner && (
+                      <button
+                        disabled={busy}
+                        onClick={() => setSettingsOpen(true)}
+                        className="rounded border border-gray-500 px-3 py-2 text-xs hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        Settings
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+                  {allPicks.map((entry) => {
+                    const isCurrent = !entry.pick && entry.pickNumber === state.draft?.currentPick;
+                    const isMyUpcoming =
+                      !entry.pick && !isCurrent && entry.team?.teamId === state.callerTeamId;
+                    return (
+                      <Fragment key={entry.pickNumber}>
+                        {entry.pickInRound === 1 && (
+                          <div className="flex w-7 shrink-0 items-center justify-center rounded border border-gray-700 bg-gray-800/70">
+                            <span className="rotate-180 text-[10px] font-bold uppercase tracking-wider text-orange-300 [writing-mode:vertical-rl]">
+                              Round {entry.round}
+                            </span>
+                          </div>
+                        )}
+                        <div
+                          ref={isCurrent ? currentPickRef : undefined}
+                          className={`w-40 shrink-0 rounded border px-2.5 py-1.5 ${
+                            isCurrent
+                              ? "border-orange-400 bg-orange-600/30"
+                              : isMyUpcoming
+                                ? "border-orange-500/70 bg-orange-500/10"
+                                : entry.pick
+                                  ? "border-gray-700 bg-gray-800"
+                                  : "border-gray-700 bg-gray-800/40"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-gray-400">
+                            <span>R{entry.round} · P{entry.pickInRound}</span>
+                            <span>#{entry.pickNumber}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs font-semibold text-gray-200">
+                            <span className="truncate">{entry.team?.teamName ?? "TBD"}</span>
+                            {entry.team?.autopickEnabled && !entry.pick && (
+                              <span className="shrink-0 rounded bg-amber-500 px-1 text-[9px] font-bold uppercase text-gray-900">Auto</span>
+                            )}
+                          </div>
+                          <div className={`truncate text-xs ${entry.pick ? "text-orange-300" : isMyUpcoming ? "text-orange-200" : "text-gray-500"}`}>
+                            {entry.pick
+                              ? `${entry.pick.player?.fullName ?? entry.pick.externalPlayerId}${entry.pick.autopick ? " (Auto)" : ""}`
+                              : isCurrent
+                                ? "On the clock"
+                                : isMyUpcoming
+                                  ? "Your pick"
+                                  : "—"}
+                          </div>
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            {settingsOpen && isCommissioner && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                onClick={() => setSettingsOpen(false)}
+              >
+                <div
+                  className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">Draft settings</h2>
+                    <button
+                      onClick={() => setSettingsOpen(false)}
+                      aria-label="Close settings"
+                      className="rounded px-2 py-1 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <label className="mt-4 block text-sm">
+                    Seconds per pick
+                    <input
+                      type="number"
+                      min={5}
+                      max={3600}
+                      value={settings.secondsPerPick}
+                      onChange={(event) =>
+                        setSettings({ ...settings, secondsPerPick: Number(event.target.value) })
+                      }
+                      className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
+                    />
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500">Applies from the next pick onward.</p>
+                  <button
+                    disabled={busy}
+                    onClick={() => void updatePickClock()}
+                    className="mt-3 w-full rounded bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    Save pick clock
+                  </button>
+                  <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-700">
+                    {state.draft.status === "IN_PROGRESS" ? (
+                      <button
+                        disabled={busy}
+                        onClick={() => void draftAction("pause")}
+                        className="w-full rounded border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-600 hover:bg-amber-50 disabled:opacity-50 dark:hover:bg-amber-900/20"
+                      >
+                        Pause draft
+                      </button>
+                    ) : (
+                      <button
+                        disabled={busy}
+                        onClick={() => void draftAction("resume")}
+                        className="w-full rounded bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+                      >
+                        Resume draft
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              <section className="space-y-6 lg:col-span-1">
+                <div className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800">
+                  <h2 className="mb-3 text-lg font-semibold">Your roster</h2>
+                  <div className="space-y-2">
+                    {rosterRows.map((row, index) => {
+                      const slotIndex = rosterRows.slice(0, index).filter((item) => item.key === row.key).length;
+                      const player = state.roster[row.key]?.[slotIndex]?.player;
+                      return (
+                        <div key={`${row.label}-${index}`} className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm dark:border-gray-700">
+                          <span className="w-14 text-xs font-semibold text-gray-500">{row.label}</span>
+                          <span className={player ? "font-medium" : "text-gray-400"}>
+                            {player ? (
+                              <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
+                                {player.fullName}
+                              </Link>
+                            ) : "Empty slot"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <PlayerDetailPanel player={selected} />
+              </section>
+
+              <section className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800 lg:col-span-2">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Available players</h2>
@@ -338,6 +582,20 @@ export default function DraftPage() {
                   </button>
                 ))}
               </div>
+              <label className="mb-3 flex items-center gap-2 text-xs text-gray-500">
+                Sort by
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value)}
+                  className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="max-h-[560px] space-y-1 overflow-y-auto">
                 {players.map((player) => (
                   <div
@@ -391,87 +649,8 @@ export default function DraftPage() {
                   Load more
                 </button>
               )}
-            </section>
-
-            <section className="space-y-6">
-              <div className="rounded-lg bg-gray-900 p-6 text-center text-white shadow-lg">
-                <p className="text-sm uppercase tracking-wider text-orange-300">On the clock</p>
-                <h2 className="mt-2 text-2xl font-bold">{state.onClock?.teamName || "Waiting"}</h2>
-                <p className="mt-1 text-sm text-gray-300">
-                  Round {state.draft.currentRound} · Pick {state.draft.currentPick}
-                </p>
-                <div className="my-4 text-5xl font-black tabular-nums text-orange-300">{seconds}s</div>
-                <button
-                  disabled={!isYourTurn || !selected || busy || state.draft.status === "PAUSED"}
-                  onClick={makePick}
-                  className="w-full rounded bg-orange-600 px-4 py-3 font-bold hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {isYourTurn ? (selected ? `Draft ${selected.fullName}` : "Select a player") : "Waiting for your turn"}
-                </button>
-                {isCommissioner && state.draft.status === "IN_PROGRESS" && (
-                  <button
-                    disabled={busy}
-                    onClick={() => draftAction("pause")}
-                    className="mt-3 rounded border border-gray-500 px-3 py-2 text-sm hover:bg-gray-800 disabled:opacity-50"
-                  >
-                    Pause draft
-                  </button>
-                )}
-                {isCommissioner && state.draft.status === "PAUSED" && (
-                  <button
-                    disabled={busy}
-                    onClick={() => draftAction("resume")}
-                    className="mt-3 rounded bg-orange-600 px-3 py-2 text-sm font-semibold hover:bg-orange-700 disabled:opacity-50"
-                  >
-                    Resume draft
-                  </button>
-                )}
-              </div>
-              <div className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800">
-                <h2 className="mb-3 text-lg font-semibold">Recent picks</h2>
-                <div className="space-y-2">
-                  {state.picks.slice(-10).reverse().map((pick) => (
-                    <div key={pick.id} className="flex justify-between gap-3 border-b border-gray-100 pb-2 text-sm dark:border-gray-700">
-                      <span>#{pick.pickNumber} · {state.order.find((entry) => entry.teamId === pick.teamId)?.teamName || "Team"}</span>
-                      <span className="font-medium">
-                        {pick.player ? (
-                          <Link href={`/players/${pick.externalPlayerId}`} className="hover:text-orange-600">
-                            {pick.player.fullName}
-                          </Link>
-                        ) : pick.externalPlayerId}
-                        {pick.autopick ? " (Auto)" : ""}
-                      </span>
-                    </div>
-                  ))}
-                  {state.picks.length === 0 && <p className="text-sm text-gray-500">No picks yet.</p>}
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-6">
-              <div className="rounded-lg bg-white p-5 shadow-lg dark:bg-gray-800">
-                <h2 className="mb-3 text-lg font-semibold">Your roster</h2>
-                <div className="space-y-2">
-                  {rosterRows.map((row, index) => {
-                    const slotIndex = rosterRows.slice(0, index).filter((item) => item.key === row.key).length;
-                    const player = state.roster[row.key]?.[slotIndex]?.player;
-                    return (
-                      <div key={`${row.label}-${index}`} className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm dark:border-gray-700">
-                        <span className="w-14 text-xs font-semibold text-gray-500">{row.label}</span>
-                        <span className={player ? "font-medium" : "text-gray-400"}>
-                          {player ? (
-                            <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
-                              {player.fullName}
-                            </Link>
-                          ) : "Empty slot"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <PlayerDetailPanel player={selected} />
-            </section>
+              </section>
+            </div>
           </div>
         )}
       </main>

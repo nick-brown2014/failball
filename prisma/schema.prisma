@@ -410,10 +410,11 @@ model Draft {
 }
 
 model DraftOrder {
-  id       String @id @default(cuid())
-  draftId  String
-  teamId   String
-  position Int
+  id              String  @id @default(cuid())
+  draftId         String
+  teamId          String
+  position        Int
+  autopickEnabled Boolean @default(false)
 
   draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
   team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)

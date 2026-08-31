@@ -8,7 +8,10 @@ import { getDraftMember } from "@/lib/draft/state";
 import { getLastSeasonSummaries } from "@/lib/draft/history";
 import { attachProjections } from "@/lib/draft/projections";
 import { getLastSeason } from "@/lib/draft/season";
+import { getProjectedScores } from "@/lib/projections/service";
 import prisma from "@/lib/prisma";
+
+type DraftPlayerSort = "name" | "projected" | "lastSeason";
 
 export async function GET(
   request: NextRequest,
@@ -54,7 +57,10 @@ export async function GET(
     const includePostseason = ["1", "true"].includes(
       request.nextUrl.searchParams.get("includePostseason")?.toLowerCase() ?? "",
     );
-    const [players, total, settings, league] = await Promise.all([
+    const sortParam = request.nextUrl.searchParams.get("sort");
+    const sort: DraftPlayerSort =
+      sortParam === "projected" || sortParam === "lastSeason" ? sortParam : "name";
+    const [matched, total, settings, league] = await Promise.all([
       prisma.$queryRaw<
         Array<{
           externalPlayerId: string;
@@ -76,7 +82,11 @@ export async function GET(
               : Prisma.empty
           }
         ORDER BY ("nflTeam" IS NULL) ASC, "position" ASC, "fullName" ASC, "externalPlayerId" ASC
-        LIMIT ${limit} OFFSET ${(page - 1) * limit}
+        ${
+          sort === "name"
+            ? Prisma.sql`LIMIT ${limit} OFFSET ${(page - 1) * limit}`
+            : Prisma.empty
+        }
       `),
       prisma.player.count({
         where: {
@@ -93,10 +103,46 @@ export async function GET(
       prisma.leagueSettings.findUnique({ where: { leagueId: id } }),
       prisma.league.findUnique({ where: { id }, select: { season: true } }),
     ]);
+    const season = league?.season ?? new Date().getUTCFullYear();
+    const lastSeason = getLastSeason(season);
+
+    // The default sort paginates in SQL; point-based sorts need the full
+    // matching pool ranked before the page can be sliced out.
+    let players = matched;
+    if (sort !== "name" && settings) {
+      const pointsById = new Map<string, number | null>();
+      if (sort === "projected") {
+        const scores = await getProjectedScores({
+          leagueId: id,
+          season,
+          externalPlayerIds: matched.map((player) => player.externalPlayerId),
+          leagueSettings: settings as unknown as Record<string, unknown>,
+        });
+        scores.forEach((score) => pointsById.set(score.externalPlayerId, score.totalPoints));
+      } else {
+        const allSummaries = await getLastSeasonSummaries(
+          matched.map((player) => player.externalPlayerId),
+          lastSeason,
+          settings as unknown as Record<string, unknown>,
+          includePostseason,
+        );
+        allSummaries.forEach((summary, playerId) => pointsById.set(playerId, summary.totalPoints));
+      }
+      players = [...matched].sort((a, b) => {
+        const aPoints = pointsById.get(a.externalPlayerId) ?? null;
+        const bPoints = pointsById.get(b.externalPlayerId) ?? null;
+        if (aPoints == null && bPoints == null) return a.fullName.localeCompare(b.fullName);
+        if (aPoints == null) return 1;
+        if (bPoints == null) return -1;
+        return bPoints - aPoints || a.fullName.localeCompare(b.fullName);
+      });
+      players = players.slice((page - 1) * limit, page * limit);
+    }
+
     const summaries = settings
       ? await getLastSeasonSummaries(
           players.map((player) => player.externalPlayerId),
-          getLastSeason(league?.season ?? new Date().getUTCFullYear()),
+          lastSeason,
           settings as unknown as Record<string, unknown>,
           includePostseason,
         )
@@ -104,7 +150,7 @@ export async function GET(
     const projectedPlayers = settings
       ? await attachProjections(players, {
           leagueId: id,
-          season: league?.season ?? new Date().getUTCFullYear(),
+          season,
         })
       : players.map((player) => ({ ...player, projected: null }));
     const draftedIds = new Set(
@@ -126,7 +172,8 @@ export async function GET(
       page,
       limit,
       total,
-      season: getLastSeason(league?.season ?? new Date().getUTCFullYear()),
+      season: lastSeason,
+      sort,
       includePostseason,
     });
   } catch (error) {

@@ -332,14 +332,25 @@ export async function settleExpiredDraftPicks(draftId: string) {
         picks: { select: { externalPlayerId: true } },
       },
     });
-    if (
-      !draft ||
-      draft.status !== DraftStatus.IN_PROGRESS ||
-      !draft.pickDeadline ||
-      draft.pickDeadline.getTime() > Date.now()
-    ) {
+    if (!draft || draft.status !== DraftStatus.IN_PROGRESS || draft.draftOrder.length === 0) {
       return results;
     }
+
+    const resolution = resolveDraftOrder(
+      draft.currentPick,
+      draft.draftOrder.length,
+      draft.draftType,
+    );
+    const order = draft.draftOrder.find(
+      (entry) => entry.position === resolution.orderPosition,
+    );
+    if (!order || !draft.league.settings) return results;
+
+    // A pick settles when its clock expired, or immediately when the on-clock
+    // team has opted into autopick.
+    const expired =
+      draft.pickDeadline != null && draft.pickDeadline.getTime() <= Date.now();
+    if (!expired && !order.autopickEnabled) return results;
 
     const draftedIds = draft.picks.map((pick) => pick.externalPlayerId);
     const availableByPosition = await Promise.all(
@@ -357,15 +368,6 @@ export async function settleExpiredDraftPicks(draftId: string) {
       ),
     );
     const available = availableByPosition.flat();
-    const resolution = resolveDraftOrder(
-      draft.currentPick,
-      draft.draftOrder.length,
-      draft.draftType,
-    );
-    const order = draft.draftOrder.find(
-      (entry) => entry.position === resolution.orderPosition,
-    );
-    if (!order || !draft.league.settings) return results;
 
     const roster = await prisma.rosterSlot.findMany({
       where: { teamId: order.teamId },

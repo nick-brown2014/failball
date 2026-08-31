@@ -82,7 +82,7 @@ const mockUsers = [
 const mockLeague = {
   id: "league_1",
   name: "Fumble Factory League",
-  season: 2024,
+  season: 2026,
   maxTeams: 12,
   isActive: true,
   isPublic: false,
