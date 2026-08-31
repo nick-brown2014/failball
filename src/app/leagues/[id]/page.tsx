@@ -2,50 +2,22 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
-interface LeagueRedirectPayload {
-  league: {
-    teams: Array<{ id: string; user: { id: string } }>;
-  };
-  userId: string;
-}
+import { useEffect } from "react";
+import { useLeagueNav } from "@/components/league/LeagueContext";
 
 export default function LeaguePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [error, setError] = useState("");
-  const [errorCode, setErrorCode] = useState("");
+  const { loading, error, errorCode, myTeamId } = useLeagueNav();
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/leagues/${id}`, { cache: "no-store" })
-      .then(async (response) => {
-        const data = (await response.json()) as LeagueRedirectPayload & {
-          error?: string;
-          code?: string;
-        };
-        if (!response.ok) {
-          if (!cancelled) {
-            setErrorCode(data.code || "INTERNAL_ERROR");
-            setError(data.error || "Unable to load league");
-          }
-          return;
-        }
-        if (cancelled) return;
-        const myTeam = data.league.teams.find((team) => team.user.id === data.userId);
-        router.replace(myTeam ? `/leagues/${id}/teams/${myTeam.id}` : `/leagues/${id}/overview`);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setErrorCode("INTERNAL_ERROR");
-          setError("Unable to load league");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, router]);
+    if (loading || error) return;
+    router.replace(myTeamId ? `/leagues/${id}/teams/${myTeamId}` : `/leagues/${id}/overview`);
+  }, [error, id, loading, myTeamId, router]);
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center">Loading league...</div>;
+  }
 
   if (!error) {
     return <div className="flex min-h-screen items-center justify-center">Loading league...</div>;

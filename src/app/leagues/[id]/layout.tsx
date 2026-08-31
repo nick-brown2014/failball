@@ -19,6 +19,8 @@ interface LeaguePayload {
   role: string;
   userId: string;
   activeSeason?: LeagueNavValue["activeSeason"];
+  error?: string;
+  code?: string;
 }
 
 export default function LeagueLayout({ children }: { children: React.ReactNode }) {
@@ -26,14 +28,20 @@ export default function LeagueLayout({ children }: { children: React.ReactNode }
   const [payload, setPayload] = useState<LeaguePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError("");
+    setErrorCode("");
     fetch(`/api/leagues/${id}`, { cache: "no-store" })
       .then(async (response) => {
         const data = (await response.json()) as LeaguePayload & { error?: string };
-        if (!response.ok) throw new Error(data.error || "Unable to load league");
+        if (!response.ok) {
+          if (!cancelled) setErrorCode(data.code || "INTERNAL_ERROR");
+          throw new Error(data.error || "Unable to load league");
+        }
         if (!cancelled) setPayload(data);
       })
       .catch((err: Error) => {
@@ -62,6 +70,7 @@ export default function LeagueLayout({ children }: { children: React.ReactNode }
       null,
     loading,
     error,
+    errorCode,
   };
 
   if (loading && !payload) {

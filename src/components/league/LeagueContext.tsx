@@ -14,6 +14,7 @@ export interface LeagueNavValue {
   myTeamName: string | null;
   loading: boolean;
   error: string;
+  errorCode: string;
 }
 
 export const LeagueNavContext = createContext<LeagueNavValue | null>(null);

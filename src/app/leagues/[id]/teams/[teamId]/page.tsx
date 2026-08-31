@@ -251,14 +251,14 @@ export default function TeamRosterPage() {
             </div>
             {(data.isOwner || data.role === "COMMISSIONER") && (
               <Link
-                href="./edit"
+                href={`/leagues/${params.id}/teams/${params.teamId}/edit`}
                 className="rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700"
               >
                 Edit Team
               </Link>
             )}
           </div>
-          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-slate-700 pt-4 sm:grid-cols-5">
+          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-slate-700 pt-4">
             <div><p className="text-xs uppercase tracking-wide text-slate-400">Record</p><p className="text-lg font-semibold">{team.wins}-{team.losses}-{team.ties}</p></div>
             <div><p className="text-xs uppercase tracking-wide text-slate-400">PF</p><p className="text-lg font-semibold">{Number(team.pointsFor).toFixed(2)}</p></div>
             <div><p className="text-xs uppercase tracking-wide text-slate-400">PA</p><p className="text-lg font-semibold">{Number(team.pointsAgainst).toFixed(2)}</p></div>
@@ -266,13 +266,13 @@ export default function TeamRosterPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
+          <div className="flex flex-col space-y-6 lg:col-span-2">
             {rosterActionError && (
               <div className="rounded-md bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/40 dark:text-red-200">
                 {rosterActionError}
               </div>
             )}
-            <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+            <section className="order-2 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-semibold">Weekly Lineup</h2>
@@ -353,19 +353,19 @@ export default function TeamRosterPage() {
                 </>
               )}
             </section>
-            <div>
+            <section className="order-1">
               <h2 className="text-2xl font-bold">{activeSeason?.season ?? team.league.season} Roster</h2>
               {activeSeason?.isUpcoming && (
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Upcoming season</p>
               )}
-            </div>
+            </section>
             {SECTIONS.map((section) => {
               const slots = roster.bySlotType[section.slotType] ?? [];
 
               return (
                 <section
                   key={section.slotType}
-                  className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
+                  className="order-1 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
                 >
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-xl font-semibold">{section.title}</h2>
