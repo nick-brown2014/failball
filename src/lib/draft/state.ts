@@ -233,6 +233,7 @@ export async function getDraftState(leagueId: string, email: string) {
         teamId: entry.team.id,
         teamName: entry.team.name,
         ownerName: entry.team.user.name || entry.team.user.email,
+        autopickEnabled: entry.autopickEnabled,
       })) ?? [],
     picks:
       draft?.picks.map((pick) => ({

@@ -10,12 +10,25 @@ type Ranking = {
   fullName: string;
   position: string | null;
   nflTeam: string | null;
-  weeksPlayed: number;
-  totalPoints: number;
-  avgPoints: number;
-  bestWeek: number;
-  worstWeek: number;
-  weeklyPoints: Array<{ week: number; points: number }>;
+  weeksPlayed?: number | null;
+  totalPoints?: number | null;
+  avgPoints?: number | null;
+  bestWeek?: number;
+  worstWeek?: number;
+  weeklyPoints?: Array<{ week: number; points: number }>;
+  projected?: {
+    totalPoints: number | null;
+    avgPoints: number | null;
+    games: number;
+    coverage: "PROJECTED" | "PARTIAL" | "UNPROJECTED";
+    isRookie: boolean;
+    estimatedFields: string[];
+    unprojectedFields: string[];
+    rawTotalPoints: number | null;
+    rawAvgPoints: number | null;
+    basis: "BLEND" | "HISTORY" | "ADP" | "POSITION_MEAN" | null;
+    confidence: "LOW" | "MEDIUM";
+  } | null;
 };
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "ST", "DEF"];
@@ -25,7 +38,7 @@ export default function DraftRankingsPage() {
   const [players, setPlayers] = useState<Ranking[]>([]);
   const [position, setPosition] = useState("ALL");
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<"total" | "avg">("total");
+  const [sort, setSort] = useState<"total" | "avg" | "projected">("total");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -72,16 +85,17 @@ export default function DraftRankingsPage() {
           <div>
             <h1 className="text-3xl font-bold">Draft rankings</h1>
             <p className="text-gray-500">
-              Historical Failball points for the {season == null ? "previous" : season} season.
+              {sort === "projected" ? "Projected" : "Historical"} Failball points for the {season == null ? "previous" : season} season.
             </p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => { setSort("total"); setPage(1); }} className={`rounded px-3 py-2 text-sm ${sort === "total" ? "bg-orange-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>Total</button>
             <button onClick={() => { setSort("avg"); setPage(1); }} className={`rounded px-3 py-2 text-sm ${sort === "avg" ? "bg-orange-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>Average</button>
+            <button onClick={() => { setSort("projected"); setPage(1); }} className={`rounded px-3 py-2 text-sm ${sort === "projected" ? "bg-orange-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>Projected</button>
           </div>
         </div>
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Players with no historical data are rookies or unplayed and will receive projections later.
+          Projected values blend last season&apos;s shrunk actual rate with a bias-corrected Rotowire projection at RB/WR/TE, and use history alone at QB/K/DEF where the projection carried no rank signal. Players without history fall back to a preseason ADP prior when available; a blank means neither history nor a usable projection is available. QB values are low confidence because no method ranked QBs in the 2024→2025 backtest.
         </div>
         <section className="mt-5 overflow-hidden rounded-lg bg-white shadow-lg dark:bg-gray-800">
           <div className="flex flex-wrap gap-3 border-b border-gray-200 p-4 dark:border-gray-700">
@@ -97,21 +111,46 @@ export default function DraftRankingsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-700/50">
-                  <tr><th className="px-4 py-3">Player</th><th className="px-4 py-3">Pos</th><th className="px-4 py-3">Weeks</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Avg</th><th className="px-4 py-3">Best / worst</th></tr>
+                  <tr><th className="px-4 py-3">Player</th><th className="px-4 py-3">Pos</th><th className="px-4 py-3">Weeks</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Avg</th><th className="px-4 py-3">Proj total</th><th className="px-4 py-3">Proj avg</th><th className="px-4 py-3">Best / worst</th></tr>
                 </thead>
                 <tbody>
                   {players.map((player) => (
                     <tr key={player.externalPlayerId} className="border-t border-gray-100 dark:border-gray-700">
-                      <td colSpan={6} className="p-0">
-                        <button onClick={() => setExpanded(expanded === player.externalPlayerId ? null : player.externalPlayerId)} className="grid w-full grid-cols-[minmax(12rem,2fr)_4rem_5rem_6rem_6rem_8rem] items-center text-left hover:bg-gray-50 dark:hover:bg-gray-700/40">
-                          <span className="px-4 py-3 font-medium">{player.fullName}<span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span></span>
+                      <td colSpan={8} className="p-0">
+                        <button onClick={() => setExpanded(expanded === player.externalPlayerId ? null : player.externalPlayerId)} className="grid w-full grid-cols-[minmax(12rem,2fr)_4rem_5rem_6rem_6rem_6rem_6rem_8rem] items-center text-left hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                          <span className="px-4 py-3 font-medium">
+                            {player.fullName}<span className="ml-2 text-xs text-gray-500">{player.nflTeam || "FA"}</span>
+                            {player.projected && (
+                              <span className="ml-2 inline-flex items-center gap-1 text-[10px] uppercase text-gray-500">
+                                {player.projected.isRookie && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Rookie</span>}
+                                <span>{player.projected.coverage.toLowerCase()}</span>
+                              </span>
+                            )}
+                          </span>
                           <span className="px-4 py-3 text-gray-500">{player.position || "—"}</span>
-                          <span className="px-4 py-3">{player.weeksPlayed}</span>
-                          <span className="px-4 py-3">{player.totalPoints.toFixed(2)}</span>
-                          <span className="px-4 py-3">{player.avgPoints.toFixed(2)}</span>
-                          <span className="px-4 py-3 text-gray-500">{player.bestWeek.toFixed(2)} / {player.worstWeek.toFixed(2)}</span>
+                          <span className="px-4 py-3">{player.weeksPlayed ?? "—"}</span>
+                          <span className="px-4 py-3">{player.totalPoints == null ? "—" : player.totalPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3">{player.avgPoints == null ? "—" : player.avgPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3">
+                            {player.projected?.totalPoints == null ? "—" : player.projected.totalPoints.toFixed(2)}
+                            {player.projected?.totalPoints != null && (player.projected.basis || player.projected.confidence === "LOW") && (
+                              <span className={`ml-1 text-[10px] lowercase ${player.projected.confidence === "LOW" ? "text-amber-700" : "text-gray-500"}`}>
+                                {player.projected.basis?.toLowerCase().replace("_", " ")}
+                                {player.projected.confidence === "LOW" ? " low" : ""}
+                              </span>
+                            )}
+                          </span>
+                          <span className="px-4 py-3">{player.projected?.avgPoints == null ? "—" : player.projected.avgPoints.toFixed(2)}</span>
+                          <span className="px-4 py-3 text-gray-500">{player.bestWeek == null ? "—" : `${player.bestWeek.toFixed(2)} / ${player.worstWeek?.toFixed(2)}`}</span>
                         </button>
-                        {expanded === player.externalPlayerId && <div className="bg-gray-50 px-4 pb-4 pt-2 dark:bg-gray-900/40"><div className="mb-2 text-xs font-semibold uppercase text-gray-500">Weekly points</div><div className="flex flex-wrap gap-2">{player.weeklyPoints.map((week) => <span key={week.week} className="rounded bg-white px-2 py-1 text-xs shadow-sm dark:bg-gray-800">W{week.week}: {week.points.toFixed(2)}</span>)}</div></div>}
+                        {expanded === player.externalPlayerId && (
+                          <div className="bg-gray-50 px-4 pb-4 pt-2 dark:bg-gray-900/40">
+                            {player.weeklyPoints && <><div className="mb-2 text-xs font-semibold uppercase text-gray-500">Weekly points</div><div className="flex flex-wrap gap-2">{player.weeklyPoints.map((week) => <span key={week.week} className="rounded bg-white px-2 py-1 text-xs shadow-sm dark:bg-gray-800">W{week.week}: {week.points.toFixed(2)}</span>)}</div></>}
+                            {player.projected && <div className="mt-3 text-xs text-gray-500">Raw projection: {player.projected.rawAvgPoints == null ? "—" : `${player.projected.rawAvgPoints.toFixed(2)} / g`}</div>}
+                            {player.projected?.estimatedFields.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Estimated from calibrated rates</div><div className="mt-1 text-xs text-gray-500">{player.projected.estimatedFields.join(", ")}</div></div> : null}
+                            {player.projected?.unprojectedFields.length ? <div className="mt-3"><div className="text-xs font-semibold uppercase text-gray-500">Not projected — charting only</div><div className="mt-1 text-xs text-gray-500">{player.projected.unprojectedFields.join(", ")}</div></div> : null}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

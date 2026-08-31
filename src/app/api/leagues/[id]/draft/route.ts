@@ -217,9 +217,9 @@ export async function PATCH(
     if (missingLeague) {
       return NextResponse.json({ error: "League not found", code: "NOT_FOUND" }, { status: 404 });
     }
-    if (!member || member.membership.role !== "COMMISSIONER") {
+    if (!member) {
       return NextResponse.json(
-        { error: "Only the commissioner can update the draft", code: "FORBIDDEN" },
+        { error: "You are not a member of this league", code: "FORBIDDEN" },
         { status: 403 },
       );
     }
@@ -232,7 +232,41 @@ export async function PATCH(
     }
     const body = await request.json().catch(() => ({}));
     const action = String(body.action ?? "");
-    if (action === "randomize-order" || action === "set-order") {
+    if (action === "set-autopick") {
+      // Any manager can toggle autopick for their own team.
+      if (!member.team) {
+        return NextResponse.json(
+          { error: "You need a team in this league to toggle autopick", code: "NO_TEAM" },
+          { status: 400 },
+        );
+      }
+      if (typeof body.enabled !== "boolean") {
+        return NextResponse.json(
+          { error: "enabled must be a boolean", code: "VALIDATION_ERROR" },
+          { status: 400 },
+        );
+      }
+      const toggled = await prisma.draftOrder.updateMany({
+        where: { draftId: draft.id, teamId: member.team.id },
+        data: { autopickEnabled: body.enabled },
+      });
+      if (toggled.count === 0) {
+        return NextResponse.json(
+          { error: "Your team is not in the draft order", code: "VALIDATION_ERROR" },
+          { status: 400 },
+        );
+      }
+      // If the toggling team is already on the clock, pick for them right away.
+      if (body.enabled) {
+        const settled = await settleExpiredDraftPicks(draft.id);
+        settled.forEach(publishDraftPick);
+      }
+    } else if (member.membership.role !== "COMMISSIONER") {
+      return NextResponse.json(
+        { error: "Only the commissioner can update the draft", code: "FORBIDDEN" },
+        { status: 403 },
+      );
+    } else if (action === "randomize-order" || action === "set-order") {
       if (draft.status !== DraftStatus.SCHEDULED) {
         return NextResponse.json(
           { error: "Draft order can only change before the draft starts", code: "INVALID_STATUS" },
@@ -265,9 +299,20 @@ export async function PATCH(
         }),
       ]);
     } else if (action === "update-settings") {
-      if (draft.status !== DraftStatus.SCHEDULED) {
+      if (draft.status === DraftStatus.COMPLETED) {
         return NextResponse.json(
-          { error: "Settings can only change while the draft is scheduled", code: "INVALID_STATUS" },
+          { error: "Settings cannot change after the draft completes", code: "INVALID_STATUS" },
+          { status: 400 },
+        );
+      }
+      // The pick clock may change mid-draft; structural settings may not.
+      const structuralKeys = ["draftType", "totalRounds", "scheduledAt"];
+      if (
+        draft.status !== DraftStatus.SCHEDULED &&
+        structuralKeys.some((key) => key in body)
+      ) {
+        return NextResponse.json(
+          { error: "Only secondsPerPick can change once the draft has started", code: "INVALID_STATUS" },
           { status: 400 },
         );
       }

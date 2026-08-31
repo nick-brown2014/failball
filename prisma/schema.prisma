@@ -410,10 +410,11 @@ model Draft {
 }
 
 model DraftOrder {
-  id       String @id @default(cuid())
-  draftId  String
-  teamId   String
-  position Int
+  id              String  @id @default(cuid())
+  draftId         String
+  teamId          String
+  position        Int
+  autopickEnabled Boolean @default(false)
 
   draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
   team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -798,6 +799,26 @@ model PlayerWeekStats {
   @@unique([externalPlayerId, season, week])
   @@index([season, week])
   @@map("player_week_stats")
+}
+
+model PlayerProjection {
+  id               String   @id @default(cuid())
+  source           String
+  season           Int
+  week             Int
+  externalPlayerId String
+  position         String?
+  nflTeam          String?
+  gamesProjected   Float?
+  yearsExp         Int?
+  stats            Json
+  sourceUpdatedAt  DateTime?
+  fetchedAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([source, season, week, externalPlayerId])
+  @@index([season, week])
+  @@map("player_projections")
 }
 
 // ============================================

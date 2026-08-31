@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { getDraftMember } from "@/lib/draft/state";
 import { getDraftRankings, type DraftRankingSort } from "@/lib/draft/history";
+import { attachProjections, getProjectedRankings } from "@/lib/draft/projections";
 import { getLastSeason } from "@/lib/draft/season";
 import prisma from "@/lib/prisma";
 
@@ -35,11 +36,30 @@ export async function GET(
     const limit = Math.min(100, Math.max(1, Number(paramsData.get("limit") ?? 50) || 50));
     const sortParam = paramsData.get("sort");
     const sort: DraftRankingSort = sortParam === "avg" ? "avg" : "total";
+    const projected = sortParam === "projected";
     const includePostseason = ["1", "true"].includes(
       paramsData.get("includePostseason")?.toLowerCase() ?? "",
     );
-    if (!Number.isInteger(season) || (position && !Object.values(Position).includes(position as Position))) {
+    if (
+      !Number.isInteger(season) ||
+      (position &&
+        ![...Object.values(Position), "K"].includes(position as Position | "K"))
+    ) {
       return NextResponse.json({ error: "Invalid season or position", code: "VALIDATION_ERROR" }, { status: 400 });
+    }
+    const source = paramsData.get("source") || "rotowire";
+    if (projected) {
+      const result = await getProjectedRankings({
+        leagueId: id,
+        season: league.season,
+        position,
+        q,
+        page,
+        limit,
+        source,
+        includePostseason,
+      });
+      return NextResponse.json({ ...result, sort: "projected" });
     }
     const result = await getDraftRankings({
       leagueId: id,
@@ -51,7 +71,12 @@ export async function GET(
       sort,
       includePostseason,
     });
-    return NextResponse.json(result);
+    const players = await attachProjections(result.players, {
+      leagueId: id,
+      season: league.season,
+      source,
+    });
+    return NextResponse.json({ ...result, players });
   } catch (error) {
     console.error("Get draft rankings error:", error);
     return NextResponse.json({ error: "Unable to load draft rankings", code: "INTERNAL_ERROR" }, { status: 500 });
