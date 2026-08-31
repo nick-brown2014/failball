@@ -130,6 +130,9 @@ export default function LeaguePage() {
   const [generatingPlayoffs, setGeneratingPlayoffs] = useState(false);
   const [activity, setActivity] = useState<ActivityTransaction[]>([]);
   const [activityError, setActivityError] = useState("");
+  const [resettingSeason, setResettingSeason] = useState(false);
+  const [seasonResetError, setSeasonResetError] = useState("");
+  const [seasonResetSummary, setSeasonResetSummary] = useState("");
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -282,6 +285,39 @@ export default function LeaguePage() {
     setTimeout(() => setCopyMessage(""), 1500);
   };
 
+  const resetSeason = async () => {
+    if (
+      !window.confirm(
+        "Start the next season? Final standings are archived to league history, every roster is cleared and all players return to free agency, records/points/FAAB/waiver order reset, last season's draft is removed, and the league moves to season N+1.",
+      )
+    ) {
+      return;
+    }
+
+    setSeasonResetError("");
+    setSeasonResetSummary("");
+    setResettingSeason(true);
+    try {
+      const response = await fetch(`/api/leagues/${params.id}/season/reset`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setSeasonResetError(data.error || "Unable to start the next season");
+        return;
+      }
+
+      setSeasonResetSummary(
+        `Season ${data.archivedSeason} archived. Season ${data.newSeason} is ready with ${data.teams} teams.`,
+      );
+      window.setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      setSeasonResetError("Unable to start the next season");
+    } finally {
+      setResettingSeason(false);
+    }
+  };
+
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -404,6 +440,36 @@ export default function LeaguePage() {
               </button>
             </div>
           </div>
+        )}
+
+        {role === "COMMISSIONER" && (
+          <section className="mb-6 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold">Season</h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Archive the finished season and prepare the league for the next one.
+                </p>
+              </div>
+              <button
+                onClick={() => void resetSeason()}
+                disabled={resettingSeason}
+                className="rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+              >
+                {resettingSeason ? "Starting..." : "Start next season"}
+              </button>
+            </div>
+            {seasonResetError && (
+              <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                {seasonResetError}
+              </p>
+            )}
+            {seasonResetSummary && (
+              <p className="mt-3 text-sm text-green-600 dark:text-green-400">
+                {seasonResetSummary}
+              </p>
+            )}
+          </section>
         )}
 
         <div className="grid lg:grid-cols-3 gap-6">

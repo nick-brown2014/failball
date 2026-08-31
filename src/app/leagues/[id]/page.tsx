@@ -15,11 +15,7 @@ export default function LeaguePage() {
     router.replace(myTeamId ? `/leagues/${id}/teams/${myTeamId}` : `/leagues/${id}/overview`);
   }, [error, id, loading, myTeamId, router]);
 
-  if (loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading league...</div>;
-  }
-
-  if (!error) {
+  if (loading || !error) {
     return <div className="flex min-h-screen items-center justify-center">Loading league...</div>;
   }
 

@@ -465,8 +465,8 @@ model Matchup {
   homeTeam Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
   awayTeam Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
 
-  @@unique([leagueId, week, homeTeamId])
-  @@unique([leagueId, week, awayTeamId])
+  @@unique([leagueId, season, week, homeTeamId])
+  @@unique([leagueId, season, week, awayTeamId])
   @@map("matchups")
 }
 

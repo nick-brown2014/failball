@@ -266,94 +266,13 @@ export default function TeamRosterPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="flex flex-col space-y-6 lg:col-span-2">
+          <div className="space-y-6 lg:col-span-2">
             {rosterActionError && (
               <div className="rounded-md bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/40 dark:text-red-200">
                 {rosterActionError}
               </div>
             )}
-            <section className="order-2 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold">Weekly Lineup</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Past-week lineups are snapshots and do not change with roster moves.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="lineup-week" className="text-sm font-medium">Week</label>
-                  <select
-                    id="lineup-week"
-                    value={week}
-                    onChange={(event) => setWeek(Number(event.target.value))}
-                    className="rounded-md border border-gray-300 px-2 py-1 dark:border-gray-600 dark:bg-gray-700"
-                  >
-                    {Array.from({ length: lineup?.settings?.regularSeasonWeeks ?? 14 }, (_, index) => index + 1).map(
-                      (value) => <option key={value} value={value}>{value}</option>,
-                    )}
-                  </select>
-                </div>
-              </div>
-              {lineup?.weekLocked && (
-                <div className="mb-4 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                  This week is locked because the matchup is complete.
-                </div>
-              )}
-              {lineupError && (
-                <div className="mb-4 rounded-md bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/40 dark:text-red-200">
-                  {lineupError}
-                </div>
-              )}
-              {!lineup ? (
-                <p className="text-sm text-gray-500">Loading lineup...</p>
-              ) : (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {LINEUP_SLOTS.map((slotName) => (
-                      <div key={slotName} className="rounded-md border p-3 dark:border-gray-700">
-                        <h3 className="mb-2 text-sm font-semibold">{slotName}</h3>
-                        {(lineup.bySlot[slotName] ?? []).length === 0 ? (
-                          <p className="text-xs text-gray-500">Empty</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {(lineup.bySlot[slotName] ?? []).map((player) => (
-                              <div key={player.externalPlayerId} className="flex items-center gap-2 text-sm">
-                                <span className="min-w-0 flex-1 truncate">
-                                  {player.player ? (
-                                    <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
-                                      {player.player.fullName}
-                                    </Link>
-                                  ) : player.externalPlayerId}
-                                </span>
-                                {player.locked && <span title="Locked" aria-label="Locked">🔒</span>}
-                                <select
-                                  value={player.slot}
-                                  disabled={!lineup.canEdit || lineup.weekLocked || player.locked}
-                                  onChange={(event) => updateLineupSlot(player.externalPlayerId, event.target.value)}
-                                  className="w-24 rounded border border-gray-300 px-1 py-1 text-xs dark:border-gray-600 dark:bg-gray-700"
-                                >
-                                  {LINEUP_SLOTS.map((value) => <option key={value} value={value}>{value}</option>)}
-                                </select>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {lineup.canEdit && !lineup.weekLocked && (
-                    <button
-                      onClick={saveLineup}
-                      disabled={savingLineup}
-                      className="mt-4 rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-                    >
-                      {savingLineup ? "Saving..." : "Save Lineup"}
-                    </button>
-                  )}
-                </>
-              )}
-            </section>
-            <section className="order-1">
+            <section>
               <h2 className="text-2xl font-bold">{activeSeason?.season ?? team.league.season} Roster</h2>
               {activeSeason?.isUpcoming && (
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Upcoming season</p>
@@ -365,7 +284,7 @@ export default function TeamRosterPage() {
               return (
                 <section
                   key={section.slotType}
-                  className="order-1 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
+                  className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
                 >
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-xl font-semibold">{section.title}</h2>
@@ -448,6 +367,87 @@ export default function TeamRosterPage() {
                 </section>
               );
             })}
+            <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">Weekly Lineup</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Past-week lineups are snapshots and do not change with roster moves.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="lineup-week" className="text-sm font-medium">Week</label>
+                  <select
+                    id="lineup-week"
+                    value={week}
+                    onChange={(event) => setWeek(Number(event.target.value))}
+                    className="rounded-md border border-gray-300 px-2 py-1 dark:border-gray-600 dark:bg-gray-700"
+                  >
+                    {Array.from({ length: lineup?.settings?.regularSeasonWeeks ?? 14 }, (_, index) => index + 1).map(
+                      (value) => <option key={value} value={value}>{value}</option>,
+                    )}
+                  </select>
+                </div>
+              </div>
+              {lineup?.weekLocked && (
+                <div className="mb-4 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  This week is locked because the matchup is complete.
+                </div>
+              )}
+              {lineupError && (
+                <div className="mb-4 rounded-md bg-red-100 px-3 py-2 text-sm text-red-700 dark:bg-red-900/40 dark:text-red-200">
+                  {lineupError}
+                </div>
+              )}
+              {!lineup ? (
+                <p className="text-sm text-gray-500">Loading lineup...</p>
+              ) : (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {LINEUP_SLOTS.map((slotName) => (
+                      <div key={slotName} className="rounded-md border p-3 dark:border-gray-700">
+                        <h3 className="mb-2 text-sm font-semibold">{slotName}</h3>
+                        {(lineup.bySlot[slotName] ?? []).length === 0 ? (
+                          <p className="text-xs text-gray-500">Empty</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {(lineup.bySlot[slotName] ?? []).map((player) => (
+                              <div key={player.externalPlayerId} className="flex items-center gap-2 text-sm">
+                                <span className="min-w-0 flex-1 truncate">
+                                  {player.player ? (
+                                    <Link href={`/players/${player.externalPlayerId}`} className="hover:text-orange-600">
+                                      {player.player.fullName}
+                                    </Link>
+                                  ) : player.externalPlayerId}
+                                </span>
+                                {player.locked && <span title="Locked" aria-label="Locked">🔒</span>}
+                                <select
+                                  value={player.slot}
+                                  disabled={!lineup.canEdit || lineup.weekLocked || player.locked}
+                                  onChange={(event) => updateLineupSlot(player.externalPlayerId, event.target.value)}
+                                  className="w-24 rounded border border-gray-300 px-1 py-1 text-xs dark:border-gray-600 dark:bg-gray-700"
+                                >
+                                  {LINEUP_SLOTS.map((value) => <option key={value} value={value}>{value}</option>)}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {lineup.canEdit && !lineup.weekLocked && (
+                    <button
+                      onClick={saveLineup}
+                      disabled={savingLineup}
+                      className="mt-4 rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      {savingLineup ? "Saving..." : "Save Lineup"}
+                    </button>
+                  )}
+                </>
+              )}
+            </section>
           </div>
 
           <div className="space-y-6">
