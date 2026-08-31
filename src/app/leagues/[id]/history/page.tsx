@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Navigation from "@/components/Navigation";
 import { ACTIVITY_TYPE_LABELS, type ActivityType } from "@/lib/transactions/describe";
 import type { LeagueHistoryPayload } from "@/app/api/leagues/[id]/history/route";
 
@@ -134,7 +133,6 @@ export default function LeagueHistoryPage() {
   if (!history) {
     return (
       <div className="min-h-screen w-full font-sans">
-        <Navigation />
         <main className="mx-auto max-w-4xl px-4 py-12 text-center">
           <h1 className="mb-4 text-2xl font-bold">Unable to Load History</h1>
           <p className="mb-4 text-gray-600 dark:text-gray-400">
@@ -153,10 +151,9 @@ export default function LeagueHistoryPage() {
 
   return (
     <div className="min-h-screen w-full font-sans">
-      <Navigation />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Link
-          href={`/leagues/${leagueId}`}
+          href={`/leagues/${leagueId}/overview`}
           className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500"
         >
           &larr; Back to League

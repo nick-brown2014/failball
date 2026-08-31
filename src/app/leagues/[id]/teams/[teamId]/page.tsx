@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
+import { useLeagueNav } from "@/components/league/LeagueContext";
 
 interface Player {
   externalPlayerId: string;
@@ -29,6 +29,8 @@ interface RosterResponse {
     wins: number;
     losses: number;
     ties: number;
+    pointsFor: string | number;
+    pointsAgainst: string | number;
     user: { id: string; name: string | null; email: string };
     league: { id: string; name: string; season: number };
   };
@@ -59,7 +61,6 @@ interface LineupResponse {
   bySlot: Record<string, LineupPlayer[]>;
 }
 
-const POSITIONS = ["QB", "RB", "WR", "TE", "ST", "DEF"];
 const LINEUP_SLOTS = ["QB", "RB", "WR", "TE", "FLEX", "ST", "DEF", "BENCH", "IR"];
 
 const SECTIONS: Array<{ slotType: string; title: string }> = [
@@ -82,6 +83,7 @@ function InjuryBadge({ status }: { status: string | null }) {
 
 export default function TeamRosterPage() {
   const params = useParams<{ id: string; teamId: string }>();
+  const { activeSeason } = useLeagueNav();
   const [data, setData] = useState<RosterResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -91,14 +93,6 @@ export default function TeamRosterPage() {
   const [lineup, setLineup] = useState<LineupResponse | null>(null);
   const [lineupError, setLineupError] = useState("");
   const [savingLineup, setSavingLineup] = useState(false);
-
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [position, setPosition] = useState("");
-  const [results, setResults] = useState<Player[]>([]);
-  const [resultCount, setResultCount] = useState(0);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
 
   const loadRoster = useCallback(async () => {
     const response = await fetch(
@@ -217,40 +211,6 @@ export default function TeamRosterPage() {
     }
   };
 
-  const runSearch = useCallback(async () => {
-    setSearching(true);
-    setSearchError("");
-
-    try {
-      const search = new URLSearchParams({ limit: "25" });
-      if (query.trim()) search.set("q", query.trim());
-      if (position) search.set("position", position);
-
-      const response = await fetch(`/api/players?${search.toString()}`);
-      const payload = await response.json();
-
-      if (!response.ok) {
-        setSearchError(payload.error || "Unable to search players");
-        setResults([]);
-        return;
-      }
-
-      setResults(payload.players);
-      setResultCount(payload.pagination.total);
-    } catch {
-      setSearchError("Unable to search players");
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, [query, position]);
-
-  useEffect(() => {
-    if (!searchOpen) return;
-    const timer = setTimeout(runSearch, 300);
-    return () => clearTimeout(timer);
-  }, [searchOpen, runSearch]);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -262,14 +222,13 @@ export default function TeamRosterPage() {
   if (error || !data) {
     return (
       <div className="font-sans min-h-screen w-full">
-        <Navigation />
         <main className="container mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="text-2xl font-bold mb-4">Unable to Load Roster</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             {error || "The roster could not be found."}
           </p>
           <Link
-            href={`/leagues/${params.id}`}
+            href={`/leagues/${params.id}/overview`}
             className="text-orange-600 hover:text-orange-500"
           >
             Return to league
@@ -283,28 +242,27 @@ export default function TeamRosterPage() {
 
   return (
     <div className="font-sans min-h-screen w-full">
-      <Navigation />
       <main className="container mx-auto max-w-6xl px-4 py-8">
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
-          <div>
-            <Link
-              href={`/leagues/${team.league.id}`}
-              className="text-sm text-orange-600 hover:text-orange-500 mb-2 inline-block"
-            >
-              &larr; Back to {team.league.name}
-            </Link>
-            <h1 className="text-3xl font-bold">{team.name}</h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              {team.user.name || team.user.email} &bull; {team.wins}-
-              {team.losses}-{team.ties} &bull; Season {team.league.season}
-            </p>
+        <div className="mb-8 rounded-lg bg-slate-900 p-6 text-white shadow-lg">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold">{team.name}</h1>
+              <p className="mt-1 text-slate-300">{team.user.name || team.user.email}</p>
+            </div>
+            {(data.isOwner || data.role === "COMMISSIONER") && (
+              <Link
+                href="./edit"
+                className="rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700"
+              >
+                Edit Team
+              </Link>
+            )}
           </div>
-          <button
-            onClick={() => setSearchOpen(!searchOpen)}
-            className="rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700"
-          >
-            {searchOpen ? "Hide Players" : "Browse Players"}
-          </button>
+          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-slate-700 pt-4 sm:grid-cols-5">
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">Record</p><p className="text-lg font-semibold">{team.wins}-{team.losses}-{team.ties}</p></div>
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">PF</p><p className="text-lg font-semibold">{Number(team.pointsFor).toFixed(2)}</p></div>
+            <div><p className="text-xs uppercase tracking-wide text-slate-400">PA</p><p className="text-lg font-semibold">{Number(team.pointsAgainst).toFixed(2)}</p></div>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -395,6 +353,12 @@ export default function TeamRosterPage() {
                 </>
               )}
             </section>
+            <div>
+              <h2 className="text-2xl font-bold">{activeSeason?.season ?? team.league.season} Roster</h2>
+              {activeSeason?.isUpcoming && (
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Upcoming season</p>
+              )}
+            </div>
             {SECTIONS.map((section) => {
               const slots = roster.bySlotType[section.slotType] ?? [];
 
@@ -515,60 +479,6 @@ export default function TeamRosterPage() {
               </div>
             </div>
 
-            {searchOpen && (
-              <div className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-                <h2 className="mb-4 text-xl font-semibold">Player Search</h2>
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search by name"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
-                />
-                <select
-                  value={position}
-                  onChange={(event) => setPosition(event.target.value)}
-                  className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
-                >
-                  <option value="">All positions</option>
-                  {POSITIONS.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-
-                {searchError && (
-                  <p className="mt-3 text-sm text-red-600">{searchError}</p>
-                )}
-
-                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                  {searching
-                    ? "Searching..."
-                    : `${resultCount} player${resultCount === 1 ? "" : "s"} found`}
-                </p>
-
-                <ul className="mt-2 max-h-96 space-y-2 overflow-y-auto">
-                  {results.map((player) => (
-                    <li
-                      key={player.externalPlayerId}
-                      className="flex items-center justify-between rounded bg-gray-50 p-2 dark:bg-gray-700"
-                    >
-                      <div>
-                        <p className="font-medium">{player.fullName}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {player.position} &bull; {player.nflTeam || "FA"}
-                        </p>
-                      </div>
-                      <InjuryBadge status={player.injuryStatus} />
-                    </li>
-                  ))}
-                </ul>
-
-                <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-                  Adding and dropping players is coming soon.
-                </p>
-              </div>
-            )}
           </div>
         </div>
       </main>

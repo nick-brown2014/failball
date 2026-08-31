@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 type Ranking = {
   externalPlayerId: string;
@@ -76,7 +75,6 @@ export default function DraftRankingsPage() {
 
   return (
     <div className="min-h-screen font-sans">
-      <Navigation />
       <main className="mx-auto max-w-7xl px-4 py-8">
         <Link href={`/leagues/${id}/draft`} className="text-sm text-orange-600 hover:text-orange-500">
           &larr; Back to draft

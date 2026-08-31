@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 interface Team {
   id: string;
@@ -682,7 +681,6 @@ export default function CommissionerPage() {
   if (error || !league) {
     return (
       <>
-        <Navigation />
         <main className="mx-auto max-w-5xl px-4 py-8">
           <p className="rounded bg-red-100 p-4 text-red-700">
             {error || "Unable to load league"}
@@ -695,7 +693,6 @@ export default function CommissionerPage() {
   if (league.role !== "COMMISSIONER") {
     return (
       <>
-        <Navigation />
         <main className="mx-auto max-w-3xl px-4 py-12">
           <h1 className="text-3xl font-bold">Commissioner tools</h1>
           <p className="mt-3 text-gray-600 dark:text-gray-400">
@@ -703,7 +700,7 @@ export default function CommissionerPage() {
           </p>
           <Link
             className="mt-4 inline-block text-orange-600"
-            href={`/leagues/${id}`}
+            href={`/leagues/${id}/overview`}
           >
             Back to league
           </Link>
@@ -714,10 +711,9 @@ export default function CommissionerPage() {
 
   return (
     <div className="min-h-screen font-sans">
-      <Navigation />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Link
-          href={`/leagues/${id}`}
+          href={`/leagues/${id}/overview`}
           className="text-sm text-orange-600 hover:text-orange-500"
         >
           &larr; Back to league

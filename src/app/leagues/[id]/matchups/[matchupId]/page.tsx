@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 import { useLiveScores } from "@/lib/realtime/useLiveScores";
 
 interface BreakdownEntry {
@@ -235,13 +234,12 @@ export default function MatchupDetailPage() {
   if (error || !detail) {
     return (
       <div className="min-h-screen w-full font-sans">
-        <Navigation />
         <main className="mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="mb-4 text-2xl font-bold">Unable to Load Matchup</h1>
           <p className="mb-4 text-gray-600 dark:text-gray-400">
             {error || "The matchup could not be found."}
           </p>
-          <Link href={`/leagues/${params.id}`} className="text-orange-600 hover:text-orange-500">
+          <Link href={`/leagues/${params.id}/overview`} className="text-orange-600 hover:text-orange-500">
             Return to league
           </Link>
         </main>
@@ -251,10 +249,9 @@ export default function MatchupDetailPage() {
 
   return (
     <div className="min-h-screen w-full font-sans">
-      <Navigation />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Link
-          href={`/leagues/${params.id}`}
+          href={`/leagues/${params.id}/overview`}
           className="mb-4 inline-block text-sm text-orange-600 hover:text-orange-500"
         >
           &larr; Back to league

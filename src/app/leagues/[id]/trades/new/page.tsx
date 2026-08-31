@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 interface Team {
   id: string;
@@ -180,7 +179,6 @@ export default function NewTradePage() {
 
   return (
     <div className="min-h-screen font-sans">
-      <Navigation />
       <main className="container mx-auto max-w-4xl px-4 py-8">
         <Link href={`/leagues/${params.id}/trades`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">&larr; Back to trades</Link>
         <h1 className="text-3xl font-bold">{counterTradeId ? "Counter a trade" : "Propose a trade"}</h1>

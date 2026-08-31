@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Navigation from "@/components/Navigation";
 import PlayerDetailPanel from "@/components/draft/PlayerDetailPanel";
 import { resolveDraftOrder } from "@/lib/draft/order";
 import type { DraftLeagueSettings } from "@/lib/draft/types";
@@ -311,7 +310,6 @@ export default function DraftPage() {
   if (!state?.league || !state.member) {
     return (
       <div className="min-h-screen">
-        <Navigation />
         <main className="mx-auto max-w-4xl px-4 py-12 text-center">
           <h1 className="text-2xl font-bold">Unable to load draft room</h1>
           <p className="mt-3 text-gray-500">{error || "You may not belong to this league."}</p>
@@ -323,11 +321,10 @@ export default function DraftPage() {
 
   return (
     <div className="min-h-screen font-sans">
-      <Navigation />
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Link href={`/leagues/${leagueId}`} className="text-sm text-orange-600 hover:text-orange-500">
+            <Link href={`/leagues/${leagueId}/overview`} className="text-sm text-orange-600 hover:text-orange-500">
               &larr; Back to {state.league.name}
             </Link>
             <h1 className="mt-2 text-3xl font-bold">Draft Room</h1>

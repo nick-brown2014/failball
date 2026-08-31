@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 interface Player {
   fullName: string;
@@ -105,7 +104,6 @@ export default function TradesPage() {
   if (error || !data) {
     return (
       <div className="min-h-screen">
-        <Navigation />
         <main className="container mx-auto max-w-5xl px-4 py-8">
           <p className="rounded-md bg-red-100 p-4 text-red-700">{error || "Unable to load trades"}</p>
         </main>
@@ -125,9 +123,8 @@ export default function TradesPage() {
 
   return (
     <div className="min-h-screen font-sans">
-      <Navigation />
       <main className="container mx-auto max-w-6xl px-4 py-8">
-        <Link href={`/leagues/${params.id}`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
+        <Link href={`/leagues/${params.id}/overview`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
           &larr; Back to league
         </Link>
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">

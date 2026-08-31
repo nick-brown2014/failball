@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Navigation from "@/components/Navigation";
 import {
   ACTIVITY_TYPES,
   ACTIVITY_TYPE_LABELS,
@@ -136,10 +135,9 @@ export default function ActivityPage() {
 
   return (
     <div className="font-sans min-h-screen w-full">
-      <Navigation />
       <main className="container mx-auto max-w-4xl px-4 py-8">
         <Link
-          href={`/leagues/${leagueId}`}
+          href={`/leagues/${leagueId}/overview`}
           className="text-sm text-orange-600 hover:text-orange-500"
         >
           &larr; Back to League

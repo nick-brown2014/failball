@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { getFinalPlayoffGameAt } from "@/lib/season/leagueSeason";
+import { resolveActiveSeason } from "@/lib/season/activeSeason";
 
 export async function GET(
   _request: Request,
@@ -82,10 +84,18 @@ export async function GET(
       );
     }
 
+    const finalPlayoffGameAt = await getFinalPlayoffGameAt(league.id, league.season);
+    const activeSeason = resolveActiveSeason({
+      leagueSeason: league.season,
+      finalPlayoffGameAt,
+      now: new Date(),
+    });
+
     return NextResponse.json({
       league,
       role: membership.role,
       userId: user.id,
+      activeSeason,
     });
   } catch (error) {
     console.error("Get league error:", error);
