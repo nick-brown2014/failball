@@ -288,7 +288,7 @@ export default function LeaguePage() {
   const resetSeason = async () => {
     if (
       !window.confirm(
-        "Start the next season? Final standings are archived to league history, every roster is cleared and all players return to free agency, records/points/FAAB/waiver order reset, last season's draft is removed, and the league moves to season N+1.",
+        `Start the next season? Final standings are archived to league history, every roster is cleared and all players return to free agency, records/points/FAAB/waiver order reset, last season's draft is removed, and the league moves to season ${(league?.season ?? 0) + 1}.`,
       )
     ) {
       return;
