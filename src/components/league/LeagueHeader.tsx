@@ -6,10 +6,14 @@ import { signOut, useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { useLeagueNav } from "./LeagueContext";
 
-interface NavGroup {
+interface NavLink {
   label: string;
-  links: Array<{ label: string; href: string }>;
+  href: string;
 }
+
+type NavItem =
+  | { label: string; href: string; links?: undefined }
+  | { label: string; href?: undefined; links: NavLink[] };
 
 export default function LeagueHeader() {
   const pathname = usePathname();
@@ -29,46 +33,27 @@ export default function LeagueHeader() {
   const accountRef = useRef<HTMLDivElement>(null);
 
   const base = `/leagues/${leagueId}`;
-  const groups: NavGroup[] = [
-    ...(myTeamId
-      ? [
-          {
-            label: "My Team",
-            links: [
-              { label: myTeamName || "Roster", href: `${base}/teams/${myTeamId}` },
-              { label: "Edit Team Info", href: `${base}/teams/${myTeamId}/edit` },
-            ],
-          },
-        ]
-      : []),
+  const myTeamHref = myTeamId ? `${base}/teams/${myTeamId}` : null;
+  const items: NavItem[] = [
+    ...(myTeamHref ? [{ label: "My Team", href: myTeamHref }] : []),
     {
       label: "Players",
       links: [
         { label: "Available Players", href: `${base}/free-agents` },
         { label: "Waivers", href: `${base}/waivers` },
         { label: "Trades", href: `${base}/trades` },
-        { label: "Draft Room", href: `${base}/draft` },
-        { label: "Draft Rankings", href: `${base}/draft/rankings` },
       ],
     },
-    {
-      label: "Scores",
-      links: [
-        { label: "Matchups", href: `${base}/matchups` },
-        { label: "Activity", href: `${base}/activity` },
-      ],
-    },
-    {
-      label: "Standings",
-      links: [
-        { label: "Current Standings", href: `${base}/standings` },
-        { label: "League History", href: `${base}/history` },
-      ],
-    },
+    { label: "Scores", href: `${base}/matchups` },
+    { label: "Standings", href: `${base}/standings` },
     {
       label: "League",
       links: [
         { label: "League Home", href: `${base}/overview` },
+        { label: "League History", href: `${base}/history` },
+        { label: "Activity", href: `${base}/activity` },
+        { label: "Draft Room", href: `${base}/draft` },
+        { label: "Draft Rankings", href: `${base}/draft/rankings` },
         { label: "Settings", href: `${base}/settings` },
         ...(role === "COMMISSIONER"
           ? [{ label: "Commissioner", href: `${base}/commissioner` }]
@@ -77,10 +62,14 @@ export default function LeagueHeader() {
     },
   ];
 
-  const activeGroup = groups
-    .flatMap((group) => group.links.map((link) => ({ ...link, group: group.label })))
+  const activeItem = items
+    .flatMap((item) =>
+      item.links
+        ? item.links.map((link) => ({ href: link.href, item: item.label }))
+        : [{ href: item.href, item: item.label }],
+    )
     .filter(({ href }) => pathname === href || pathname.startsWith(`${href}/`))
-    .sort((a, b) => b.href.length - a.href.length)[0]?.group;
+    .sort((a, b) => b.href.length - a.href.length)[0]?.item;
 
   useEffect(() => {
     const closeMenus = (event: MouseEvent) => {
@@ -167,27 +156,35 @@ export default function LeagueHeader() {
       </div>
       <div className="border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
         <div className="mx-auto hidden max-w-7xl items-center gap-1 px-4 md:flex" ref={groupRef}>
-          {groups.map((group) => {
-            const active = activeGroup === group.label;
-            const open = openGroup === group.label;
+          {items.map((item) => {
+            const active = activeItem === item.label;
+            const tabClass = `border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+              active
+                ? "border-orange-600 text-orange-600"
+                : "border-transparent text-gray-700 hover:border-orange-300 hover:text-orange-600 dark:text-gray-200"
+            }`;
+            if (!item.links) {
+              return (
+                <Link key={item.label} href={item.href} className={tabClass}>
+                  {item.label}
+                </Link>
+              );
+            }
+            const open = openGroup === item.label;
             return (
-              <div key={group.label} className="relative">
+              <div key={item.label} className="relative">
                 <button
                   type="button"
                   aria-expanded={open}
                   aria-haspopup="menu"
-                  onClick={() => setOpenGroup(open ? null : group.label)}
-                  className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
-                    active
-                      ? "border-orange-600 text-orange-600"
-                      : "border-transparent text-gray-700 hover:border-orange-300 hover:text-orange-600 dark:text-gray-200"
-                  }`}
+                  onClick={() => setOpenGroup(open ? null : item.label)}
+                  className={tabClass}
                 >
-                  {group.label} ▾
+                  {item.label} ▾
                 </button>
                 {open && (
                   <div className="absolute left-0 top-full z-50 min-w-48 rounded-b-md border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-800" role="menu">
-                    {group.links.map((link) => (
+                    {item.links.map((link) => (
                       <Link key={link.href} href={link.href} role="menuitem" onClick={() => setOpenGroup(null)} className="block rounded px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 dark:text-gray-200 dark:hover:bg-gray-700">
                         {link.label}
                       </Link>
@@ -200,20 +197,33 @@ export default function LeagueHeader() {
         </div>
         {mobileOpen && (
           <nav id="league-mobile-nav" className="space-y-3 px-4 py-4 md:hidden">
-            {groups.map((group) => (
-              <div key={group.label}>
-                <div className={`mb-1 border-l-4 pl-2 text-sm font-bold ${activeGroup === group.label ? "border-orange-600 text-orange-600" : "border-transparent text-gray-700 dark:text-gray-200"}`}>
-                  {group.label}
+            {items.map((item) => {
+              const headingClass = `border-l-4 pl-2 text-sm font-bold ${activeItem === item.label ? "border-orange-600 text-orange-600" : "border-transparent text-gray-700 dark:text-gray-200"}`;
+              if (!item.links) {
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`block ${headingClass}`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              }
+              return (
+                <div key={item.label}>
+                  <div className={`mb-1 ${headingClass}`}>{item.label}</div>
+                  <div className="grid gap-1 pl-3">
+                    {item.links.map((link) => (
+                      <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)} className="rounded px-2 py-1.5 text-sm text-gray-600 hover:bg-orange-50 hover:text-orange-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid gap-1 pl-3">
-                  {group.links.map((link) => (
-                    <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)} className="rounded px-2 py-1.5 text-sm text-gray-600 hover:bg-orange-50 hover:text-orange-600 dark:text-gray-300 dark:hover:bg-gray-700">
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </nav>
         )}
       </div>

@@ -29,8 +29,10 @@ a:hover {
   opacity: 0.7;
 }
 
-p, h1, h2, h3, h4, h5 {
-  color: #334155;
+@layer base {
+  p, h1, h2, h3, h4, h5 {
+    color: #334155;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,7 +42,9 @@ p, h1, h2, h3, h4, h5 {
     --foreground: #ed8936;
   }
 
-  p, h1, h2, h3, h4, h5 {
-    color: #f1f5f9
+  @layer base {
+    p, h1, h2, h3, h4, h5 {
+      color: #f1f5f9
+    }
   }
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useLeagueNav } from "@/components/league/LeagueContext";
+import EditTeamModal from "@/components/league/EditTeamModal";
 
 interface Player {
   externalPlayerId: string;
@@ -22,6 +23,18 @@ interface RosterSlot {
   player: Player | null;
 }
 
+interface SlotSettings {
+  qbSlots: number;
+  rbSlots: number;
+  wrSlots: number;
+  teSlots: number;
+  flexSlots: number;
+  stSlots: number;
+  defSlots: number;
+  benchSize: number;
+  irSlots: number;
+}
+
 interface RosterResponse {
   team: {
     id: string;
@@ -36,6 +49,7 @@ interface RosterResponse {
   };
   isOwner: boolean;
   role: string;
+  slotSettings: SlotSettings | null;
   roster: {
     bySlotType: Record<string, RosterSlot[]>;
     counts: { total: number; starters: number; bench: number; ir: number };
@@ -63,11 +77,63 @@ interface LineupResponse {
 
 const LINEUP_SLOTS = ["QB", "RB", "WR", "TE", "FLEX", "ST", "DEF", "BENCH", "IR"];
 
-const SECTIONS: Array<{ slotType: string; title: string }> = [
-  { slotType: "STARTER", title: "Starters" },
-  { slotType: "BENCH", title: "Bench" },
-  { slotType: "IR", title: "Injured Reserve" },
+const DEFAULT_SLOT_SETTINGS: SlotSettings = {
+  qbSlots: 1,
+  rbSlots: 2,
+  wrSlots: 2,
+  flexSlots: 1,
+  teSlots: 1,
+  defSlots: 1,
+  stSlots: 1,
+  benchSize: 5,
+  irSlots: 1,
+};
+
+const STARTER_SLOT_ORDER: Array<{ key: keyof SlotSettings; label: string; position: string }> = [
+  { key: "qbSlots", label: "QB", position: "QB" },
+  { key: "rbSlots", label: "RB", position: "RB" },
+  { key: "wrSlots", label: "WR", position: "WR" },
+  { key: "flexSlots", label: "FLEX", position: "FLEX" },
+  { key: "teSlots", label: "TE", position: "TE" },
+  { key: "defSlots", label: "DEF", position: "DEF" },
+  { key: "stSlots", label: "ST", position: "ST" },
 ];
+
+interface RosterRow {
+  label: string;
+  slot: RosterSlot | null;
+}
+
+function buildRosterRows(
+  bySlotType: Record<string, RosterSlot[]>,
+  settings: SlotSettings,
+): { starters: RosterRow[]; bench: RosterRow[]; ir: RosterRow[] } {
+  const pools: Record<string, RosterSlot[]> = {};
+  for (const slot of bySlotType.STARTER ?? []) {
+    (pools[slot.position] ??= []).push(slot);
+  }
+
+  const starters: RosterRow[] = [];
+  for (const def of STARTER_SLOT_ORDER) {
+    const pool = pools[def.position] ?? [];
+    const count = Math.max(settings[def.key], pool.length);
+    for (let index = 0; index < count; index += 1) {
+      starters.push({ label: def.label, slot: pool[index] ?? null });
+    }
+  }
+
+  const fill = (label: string, slots: RosterSlot[], count: number): RosterRow[] =>
+    Array.from({ length: Math.max(count, slots.length) }, (_, index) => ({
+      label,
+      slot: slots[index] ?? null,
+    }));
+
+  return {
+    starters,
+    bench: fill("BN", bySlotType.BENCH ?? [], settings.benchSize),
+    ir: fill("IR", bySlotType.IR ?? [], settings.irSlots),
+  };
+}
 
 function InjuryBadge({ status }: { status: string | null }) {
   if (!status) {
@@ -93,6 +159,7 @@ export default function TeamRosterPage() {
   const [lineup, setLineup] = useState<LineupResponse | null>(null);
   const [lineupError, setLineupError] = useState("");
   const [savingLineup, setSavingLineup] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const loadRoster = useCallback(async () => {
     const response = await fetch(
@@ -239,31 +306,54 @@ export default function TeamRosterPage() {
   }
 
   const { team, roster } = data;
+  const rosterRows = buildRosterRows(
+    roster.bySlotType,
+    data.slotSettings ?? DEFAULT_SLOT_SETTINGS,
+  );
 
   return (
     <div className="font-sans min-h-screen w-full">
       <main className="container mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-8 rounded-lg bg-slate-900 p-6 text-white shadow-lg">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold">{team.name}</h1>
-              <p className="mt-1 text-slate-300">{team.user.name || team.user.email}</p>
-            </div>
-            {(data.isOwner || data.role === "COMMISSIONER") && (
-              <Link
-                href={`/leagues/${params.id}/teams/${params.teamId}/edit`}
-                className="rounded-md bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700"
+        <div className="relative mb-8 rounded-lg bg-slate-900 p-6 text-white shadow-lg">
+          {(data.isOwner || data.role === "COMMISSIONER") && (
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              aria-label="Edit team"
+              title="Edit team"
+              className="absolute right-4 top-4 rounded-md p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5"
+                aria-hidden="true"
               >
-                Edit Team
-              </Link>
-            )}
-          </div>
-          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-slate-700 pt-4">
-            <div><p className="text-xs uppercase tracking-wide text-slate-400">Record</p><p className="text-lg font-semibold">{team.wins}-{team.losses}-{team.ties}</p></div>
-            <div><p className="text-xs uppercase tracking-wide text-slate-400">PF</p><p className="text-lg font-semibold">{Number(team.pointsFor).toFixed(2)}</p></div>
-            <div><p className="text-xs uppercase tracking-wide text-slate-400">PA</p><p className="text-lg font-semibold">{Number(team.pointsAgainst).toFixed(2)}</p></div>
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          )}
+          <div>
+            <h1 className="text-3xl font-bold text-white">{team.name}</h1>
+            <p className="mt-1 text-slate-300">{team.user.name || team.user.email}</p>
           </div>
         </div>
+        {editOpen && (
+          <EditTeamModal
+            leagueId={params.id}
+            teamId={params.teamId}
+            initialName={team.name}
+            ownerEmail={team.user.email}
+            onClose={() => setEditOpen(false)}
+            onSaved={loadRoster}
+          />
+        )}
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
@@ -278,95 +368,104 @@ export default function TeamRosterPage() {
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Upcoming season</p>
               )}
             </section>
-            {SECTIONS.map((section) => {
-              const slots = roster.bySlotType[section.slotType] ?? [];
-
-              return (
-                <section
-                  key={section.slotType}
-                  className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
-                >
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-xl font-semibold">{section.title}</h2>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {slots.length} player{slots.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  {slots.length === 0 ? (
-                    <p className="text-gray-500 dark:text-gray-400">
-                      No players in this section yet.
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b dark:border-gray-700">
-                            <th className="px-2 py-3 text-left">Slot</th>
-                            <th className="px-2 py-3 text-left">Player</th>
-                            <th className="px-2 py-3 text-left">Pos</th>
-                            <th className="px-2 py-3 text-left">NFL Team</th>
-                            <th className="px-2 py-3 text-left">Status</th>
-                            {(data.isOwner || data.role === "COMMISSIONER") && (
-                              <th className="px-2 py-3 text-right">Action</th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {slots.map((slot) => (
-                            <tr
-                              key={slot.id}
-                              className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                            >
-                              <td className="px-2 py-3 font-medium">
-                                {slot.position}
-                              </td>
+            <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b dark:border-gray-700">
+                      <th className="w-16 px-2 py-3 text-left">Slot</th>
+                      <th className="px-2 py-3 text-left">Player</th>
+                      <th className="px-2 py-3 text-left">Pos</th>
+                      <th className="px-2 py-3 text-left">NFL Team</th>
+                      <th className="px-2 py-3 text-left">Status</th>
+                      {(data.isOwner || data.role === "COMMISSIONER") && (
+                        <th className="px-2 py-3 text-right">Action</th>
+                      )}
+                    </tr>
+                  </thead>
+                  {[
+                    { title: "Starters", rows: rosterRows.starters },
+                    { title: "Bench", rows: rosterRows.bench },
+                    { title: "Injured Reserve", rows: rosterRows.ir },
+                  ].map((group) => (
+                    <tbody key={group.title}>
+                      <tr>
+                        <td
+                          colSpan={data.isOwner || data.role === "COMMISSIONER" ? 6 : 5}
+                          className="px-2 pb-2 pt-5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                        >
+                          {group.title}
+                        </td>
+                      </tr>
+                      {group.rows.map((row, index) => (
+                        <tr
+                          key={row.slot?.id ?? `${group.title}-${row.label}-${index}`}
+                          className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                        >
+                          <td className="px-2 py-3">
+                            <span className="inline-block w-12 rounded bg-slate-100 px-2 py-0.5 text-center text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                              {row.label}
+                            </span>
+                          </td>
+                          {row.slot ? (
+                            <>
                               <td className="px-2 py-3">
-                                {slot.player ? (
-                                  <Link href={`/players/${slot.externalPlayerId}`} className="hover:text-orange-600">
-                                    {slot.player.fullName}
+                                {row.slot.player ? (
+                                  <Link href={`/players/${row.slot.externalPlayerId}`} className="hover:text-orange-600">
+                                    {row.slot.player.fullName}
                                   </Link>
                                 ) : (
                                   <span className="text-gray-500">
-                                    Unknown player ({slot.externalPlayerId})
+                                    Unknown player ({row.slot.externalPlayerId})
                                   </span>
                                 )}
                               </td>
                               <td className="px-2 py-3">
-                                {slot.player?.position || "--"}
+                                {row.slot.player?.position || "--"}
                               </td>
                               <td className="px-2 py-3">
-                                {slot.player?.nflTeam || "FA"}
+                                {row.slot.player?.nflTeam || "FA"}
                               </td>
                               <td className="px-2 py-3">
                                 <InjuryBadge
-                                  status={slot.player?.injuryStatus ?? null}
+                                  status={row.slot.player?.injuryStatus ?? null}
                                 />
                               </td>
                               {(data.isOwner || data.role === "COMMISSIONER") && (
                                 <td className="px-2 py-3 text-right">
                                   <button
-                                    onClick={() =>
-                                      void dropPlayer(
-                                        slot.externalPlayerId,
-                                        slot.player?.fullName ?? slot.externalPlayerId,
-                                      )
-                                    }
-                                    disabled={rosterBusy === slot.externalPlayerId}
+                                    onClick={() => {
+                                      const slot = row.slot;
+                                      if (slot) {
+                                        void dropPlayer(
+                                          slot.externalPlayerId,
+                                          slot.player?.fullName ?? slot.externalPlayerId,
+                                        );
+                                      }
+                                    }}
+                                    disabled={rosterBusy === row.slot.externalPlayerId}
                                     className="rounded-md border border-red-600 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
                                   >
-                                    {rosterBusy === slot.externalPlayerId ? "Dropping..." : "Drop"}
+                                    {rosterBusy === row.slot.externalPlayerId ? "Dropping..." : "Drop"}
                                   </button>
                                 </td>
                               )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </section>
-              );
-            })}
+                            </>
+                          ) : (
+                            <td
+                              colSpan={data.isOwner || data.role === "COMMISSIONER" ? 5 : 4}
+                              className="px-2 py-3 text-gray-400 dark:text-gray-500"
+                            >
+                              Empty
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  ))}
+                </table>
+              </div>
+            </section>
             <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>

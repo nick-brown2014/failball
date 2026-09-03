@@ -68,7 +68,26 @@ export async function GET(
         pointsFor: true,
         pointsAgainst: true,
         user: { select: { id: true, name: true, email: true } },
-        league: { select: { id: true, name: true, season: true } },
+        league: {
+          select: {
+            id: true,
+            name: true,
+            season: true,
+            settings: {
+              select: {
+                qbSlots: true,
+                rbSlots: true,
+                wrSlots: true,
+                teSlots: true,
+                flexSlots: true,
+                stSlots: true,
+                defSlots: true,
+                benchSize: true,
+                irSlots: true,
+              },
+            },
+          },
+        },
         roster: {
           select: {
             id: true,
@@ -118,8 +137,13 @@ export async function GET(
         pointsFor: team.pointsFor,
         pointsAgainst: team.pointsAgainst,
         user: team.user,
-        league: team.league,
+        league: {
+          id: team.league.id,
+          name: team.league.name,
+          season: team.league.season,
+        },
       },
+      slotSettings: team.league.settings,
       isOwner: team.user.id === user.id,
       role: membership.role,
       roster: {

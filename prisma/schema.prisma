@@ -165,7 +165,7 @@ model LeagueSettings {
 
   // Roster Configuration
   rosterSize        Int @default(15)
-  benchSize         Int @default(6)
+  benchSize         Int @default(5)
   qbSlots           Int @default(1)
   rbSlots           Int @default(2)
   wrSlots           Int @default(2)
