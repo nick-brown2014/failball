@@ -165,7 +165,7 @@ model LeagueSettings {
 
   // Roster Configuration
   rosterSize        Int @default(15)
-  benchSize         Int @default(6)
+  benchSize         Int @default(5)
   qbSlots           Int @default(1)
   rbSlots           Int @default(2)
   wrSlots           Int @default(2)
@@ -465,8 +465,8 @@ model Matchup {
   homeTeam Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
   awayTeam Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
 
-  @@unique([leagueId, week, homeTeamId])
-  @@unique([leagueId, week, awayTeamId])
+  @@unique([leagueId, season, week, homeTeamId])
+  @@unique([leagueId, season, week, awayTeamId])
   @@map("matchups")
 }
 

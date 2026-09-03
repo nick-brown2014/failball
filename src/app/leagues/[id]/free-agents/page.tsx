@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 interface Player {
   externalPlayerId: string;
@@ -175,11 +174,10 @@ export default function FreeAgentsPage() {
   if (error) {
     return (
       <div className="font-sans min-h-screen w-full">
-        <Navigation />
         <main className="container mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="mb-4 text-2xl font-bold">Unable to Load Free Agents</h1>
           <p className="mb-4 text-gray-600 dark:text-gray-400">{error}</p>
-          <Link href={`/leagues/${leagueId}`} className="text-orange-600 hover:text-orange-500">
+          <Link href={`/leagues/${leagueId}/overview`} className="text-orange-600 hover:text-orange-500">
             Return to league
           </Link>
         </main>
@@ -189,9 +187,8 @@ export default function FreeAgentsPage() {
 
   return (
     <div className="font-sans min-h-screen w-full">
-      <Navigation />
       <main className="container mx-auto max-w-5xl px-4 py-8">
-        <Link href={`/leagues/${leagueId}`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
+        <Link href={`/leagues/${leagueId}/overview`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
           &larr; Back to league
         </Link>
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">

@@ -17,12 +17,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isAuthorizedCronRequest } from "@/lib/cron";
 import prisma from "@/lib/prisma";
-import {
-  checkPlayoffsComplete,
-  derivePlayoffResults,
-} from "@/lib/history/seasonRecords";
+import { buildSeasonRecordRows, upsertSeasonRecords } from "@/lib/history/archiveSeason";
+import { checkPlayoffsComplete } from "@/lib/history/seasonRecords";
 import { getPlayoffBracket, PlayoffError } from "@/lib/schedule/playoffs";
-import { sortStandings } from "@/lib/schedule/standings";
 
 export const dynamic = "force-dynamic";
 
@@ -119,43 +116,6 @@ export async function POST(
       );
     }
 
-    const matchups = await prisma.matchup.findMany({
-      where: { leagueId: id, season },
-      select: {
-        homeTeamId: true,
-        awayTeamId: true,
-        homeScore: true,
-        awayScore: true,
-        isComplete: true,
-      },
-    });
-    const standingsMatchups = matchups.map((matchup) => ({
-      homeTeamId: matchup.homeTeamId,
-      awayTeamId: matchup.awayTeamId,
-      homeScore: matchup.homeScore == null ? null : Number(matchup.homeScore),
-      awayScore: matchup.awayScore == null ? null : Number(matchup.awayScore),
-      isComplete: matchup.isComplete,
-    }));
-
-    // Same ordering the standings page shows.
-    const standings = sortStandings(
-      league.teams.map((team) => ({
-        teamId: team.id,
-        name: team.name,
-        wins: team.wins,
-        losses: team.losses,
-        ties: team.ties,
-        pointsFor: Number(team.pointsFor),
-        pointsAgainst: Number(team.pointsAgainst),
-      })),
-      standingsMatchups,
-    );
-
-    const playoffResults = derivePlayoffResults({
-      teamIds: league.teams.map((team) => team.id),
-      bracket,
-    });
-
     const existing = await prisma.seasonRecord.findMany({
       where: { leagueId: id, season },
       select: { id: true, teamId: true },
@@ -168,28 +128,15 @@ export async function POST(
       );
     }
 
-    const rows = standings.map((team, index) => ({
-      teamId: team.teamId,
+    const rows = await buildSeasonRecordRows({
       leagueId: id,
       season,
-      finalRank: index + 1,
-      wins: team.wins,
-      losses: team.losses,
-      ties: team.ties,
-      pointsFor: team.pointsFor,
-      pointsAgainst: team.pointsAgainst,
-      playoffResult: playoffResults.get(team.teamId)!,
-    }));
+      teams: league.teams,
+      bracket,
+    });
 
     await prisma.$transaction(async (tx) => {
-      for (const row of rows) {
-        const { teamId, season: rowSeason, ...rest } = row;
-        await tx.seasonRecord.upsert({
-          where: { teamId_season: { teamId, season: rowSeason } },
-          create: { teamId, season: rowSeason, ...rest },
-          update: rest,
-        });
-      }
+      await upsertSeasonRecords(tx, rows);
     });
 
     return NextResponse.json({

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 interface StandingsRow {
   teamId: string;
@@ -91,7 +90,6 @@ export default function StandingsPage() {
     const forbidden = loadErrorCode === "FORBIDDEN";
     return (
       <div className="min-h-screen w-full font-sans">
-        <Navigation />
         <main className="mx-auto max-w-4xl px-4 py-12 text-center">
           <h1 className="mb-4 text-2xl font-bold">
             {notFound ? "League Not Found" : forbidden ? "Access Denied" : "Unable to Load Standings"}
@@ -109,9 +107,8 @@ export default function StandingsPage() {
 
   return (
     <div className="min-h-screen w-full font-sans">
-      <Navigation />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <Link href={`/leagues/${params.id}`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
+        <Link href={`/leagues/${params.id}/overview`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
           &larr; Back to League
         </Link>
         <h1 className="text-3xl font-bold">Standings</h1>

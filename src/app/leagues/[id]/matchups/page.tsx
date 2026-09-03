@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Navigation from "@/components/Navigation";
 import { useLiveScores } from "@/lib/realtime/useLiveScores";
 
 interface ScheduleMatchup {
@@ -142,7 +141,6 @@ export default function MatchupsPage() {
     const forbidden = loadErrorCode === "FORBIDDEN";
     return (
       <div className="min-h-screen w-full font-sans">
-        <Navigation />
         <main className="mx-auto max-w-4xl px-4 py-12 text-center">
           <h1 className="mb-4 text-2xl font-bold">
             {notFound ? "League Not Found" : forbidden ? "Access Denied" : "Unable to Load Matchups"}
@@ -160,11 +158,10 @@ export default function MatchupsPage() {
 
   return (
     <div className="min-h-screen w-full font-sans">
-      <Navigation />
       <main className="mx-auto max-w-5xl px-4 py-8">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Link href={`/leagues/${leagueId}`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
+            <Link href={`/leagues/${leagueId}/overview`} className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500">
               &larr; Back to League
             </Link>
             <h1 className="text-3xl font-bold">Matchups</h1>
@@ -204,7 +201,7 @@ export default function MatchupsPage() {
             <p className="mb-4 text-gray-600 dark:text-gray-400">
               The commissioner can generate the schedule from the league page.
             </p>
-            <Link href={`/leagues/${leagueId}`} className="text-orange-600 hover:text-orange-500">
+            <Link href={`/leagues/${leagueId}/overview`} className="text-orange-600 hover:text-orange-500">
               Return to league
             </Link>
           </div>

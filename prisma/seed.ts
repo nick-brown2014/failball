@@ -1,4 +1,4 @@
-import { PrismaClient, MemberRole } from "@prisma/client";
+import { PrismaClient, MemberRole, PlayoffResult } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -87,6 +87,10 @@ const mockLeague = {
   isActive: true,
   isPublic: false,
 };
+
+// Teams start the current season with clean records; the win/loss and points
+// data below is archived as SeasonRecord history for the previous season.
+const previousSeason = mockLeague.season - 1;
 
 const mockTeams = [
   {
@@ -228,6 +232,7 @@ async function main() {
 
   // Clear existing data (in reverse order of dependencies)
   console.log("Clearing existing data...");
+  await prisma.seasonRecord.deleteMany({});
   await prisma.team.deleteMany({});
   await prisma.leagueMembership.deleteMany({});
   await prisma.leagueSettings.deleteMany({});
@@ -287,7 +292,7 @@ async function main() {
     console.log(`  Added ${user.name} to league as ${i === 0 ? "COMMISSIONER" : "MEMBER"}`);
   }
 
-  // Create teams
+  // Create teams with clean records for the upcoming season
   console.log("Creating teams...");
   for (const teamData of mockTeams) {
     await prisma.team.create({
@@ -296,15 +301,39 @@ async function main() {
         name: teamData.name,
         userId: teamData.userId,
         leagueId: teamData.leagueId,
+      },
+    });
+    const owner = mockUsers.find((u) => u.id === teamData.userId);
+    console.log(`  Created team: ${teamData.name} (Owner: ${owner?.name})`);
+  }
+
+  // Archive last season's results as historical records (mockTeams is
+  // ordered by final standing; default settings have 6 playoff teams).
+  console.log(`Creating ${previousSeason} season records...`);
+  const playoffResults: PlayoffResult[] = [
+    PlayoffResult.CHAMPION,
+    PlayoffResult.RUNNER_UP,
+    PlayoffResult.THIRD_PLACE,
+    PlayoffResult.SEMIFINAL,
+    PlayoffResult.QUARTERFINAL,
+    PlayoffResult.QUARTERFINAL,
+  ];
+  for (const [index, teamData] of mockTeams.entries()) {
+    await prisma.seasonRecord.create({
+      data: {
+        teamId: teamData.id,
+        leagueId: teamData.leagueId,
+        season: previousSeason,
+        finalRank: index + 1,
         wins: teamData.wins,
         losses: teamData.losses,
         ties: teamData.ties,
         pointsFor: teamData.pointsFor,
         pointsAgainst: teamData.pointsAgainst,
+        playoffResult: playoffResults[index] ?? PlayoffResult.MISSED_PLAYOFFS,
       },
     });
-    const owner = mockUsers.find((u) => u.id === teamData.userId);
-    console.log(`  Created team: ${teamData.name} (Owner: ${owner?.name})`);
+    console.log(`  Archived ${teamData.name}: rank ${index + 1} (${teamData.wins}-${teamData.losses}-${teamData.ties})`);
   }
 
   console.log("\nSeed completed successfully!");

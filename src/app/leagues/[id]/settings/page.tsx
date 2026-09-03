@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 interface ValidationError {
   field: string;
@@ -264,32 +263,12 @@ export default function LeagueSettingsPage() {
   if (error && Object.keys(settings).length === 0) {
     return (
       <div className="font-sans min-h-screen">
-        <Navigation />
         <main className="container mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="text-2xl font-bold mb-4">
             Unable to Load Settings
           </h1>
           <p className="text-red-600 mb-4">{error}</p>
-          <Link href={`/leagues/${params.id}`} className="text-orange-600">
-            Return to league
-          </Link>
-        </main>
-      </div>
-    );
-  }
-
-  if (role !== "COMMISSIONER") {
-    return (
-      <div className="font-sans min-h-screen">
-        <Navigation />
-        <main className="container mx-auto max-w-3xl px-4 py-12 text-center">
-          <h1 className="text-2xl font-bold mb-4">
-            Commissioner Access Required
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Only the league commissioner can edit these settings.
-          </p>
-          <Link href={`/leagues/${params.id}`} className="text-orange-600">
+          <Link href={`/leagues/${params.id}/overview`} className="text-orange-600">
             Return to league
           </Link>
         </main>
@@ -299,17 +278,19 @@ export default function LeagueSettingsPage() {
 
   return (
     <div className="font-sans min-h-screen">
-      <Navigation />
       <main className="container mx-auto max-w-5xl px-4 py-8">
         <Link
-          href={`/leagues/${params.id}`}
+          href={`/leagues/${params.id}/overview`}
           className="text-sm text-orange-600 hover:text-orange-500"
         >
           &larr; Back to League
         </Link>
-        <h1 className="text-3xl font-bold mt-2 mb-6">
-          Commissioner Settings
-        </h1>
+        <h1 className="text-3xl font-bold mt-2 mb-2">League Settings</h1>
+        {role !== "COMMISSIONER" && (
+          <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+            Only the commissioner can change league settings.
+          </p>
+        )}
         {success && (
           <div className="mb-4 rounded border border-green-300 bg-green-50 px-4 py-3 text-green-700">
             {success}
@@ -336,6 +317,7 @@ export default function LeagueSettingsPage() {
                     {field === "waiverType" ? (
                       <select
                         value={settings[field] || ""}
+                        disabled={role !== "COMMISSIONER"}
                         onChange={(event) =>
                           updateField(field, event.target.value)
                         }
@@ -350,6 +332,7 @@ export default function LeagueSettingsPage() {
                         type="number"
                         step={integerFields.has(field) ? 1 : 0.01}
                         value={settings[field] || ""}
+                        disabled={role !== "COMMISSIONER"}
                         onChange={(event) =>
                           updateField(field, event.target.value)
                         }
@@ -366,12 +349,14 @@ export default function LeagueSettingsPage() {
               </div>
             </section>
           ))}
-          <button
-            disabled={saving}
-            className="rounded-md bg-orange-600 px-6 py-2 font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Settings"}
-          </button>
+          {role === "COMMISSIONER" && (
+            <button
+              disabled={saving}
+              className="rounded-md bg-orange-600 px-6 py-2 font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Settings"}
+            </button>
+          )}
         </form>
       </main>
     </div>

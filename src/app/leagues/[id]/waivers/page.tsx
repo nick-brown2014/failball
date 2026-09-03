@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Navigation from "@/components/Navigation";
 
 interface Player {
   externalPlayerId: string;
@@ -230,12 +229,11 @@ export default function WaiversPage() {
   if (error || !data) {
     return (
       <div className="font-sans min-h-screen w-full">
-        <Navigation />
         <main className="container mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="mb-4 text-2xl font-bold">Unable to Load Waivers</h1>
           <p className="mb-4 text-gray-600 dark:text-gray-400">{error}</p>
           <Link
-            href={`/leagues/${leagueId}`}
+            href={`/leagues/${leagueId}/overview`}
             className="text-orange-600 hover:text-orange-500"
           >
             Return to league
@@ -254,10 +252,9 @@ export default function WaiversPage() {
 
   return (
     <div className="font-sans min-h-screen w-full">
-      <Navigation />
       <main className="container mx-auto max-w-5xl px-4 py-8">
         <Link
-          href={`/leagues/${leagueId}`}
+          href={`/leagues/${leagueId}/overview`}
           className="mb-2 inline-block text-sm text-orange-600 hover:text-orange-500"
         >
           &larr; Back to league
