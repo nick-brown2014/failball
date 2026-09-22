@@ -7,7 +7,16 @@
 
 import { PlayoffRound } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { sortStandings, type StandingsMatchup, type StandingsTeam } from "./standings";
+import {
+  sortStandings,
+  sortStandingsWithDivisionWinners,
+  type StandingsMatchup,
+  type StandingsTeam,
+} from "./standings";
+
+export interface PlayoffStandingsTeam extends StandingsTeam {
+  divisionId?: string | null;
+}
 
 export type PlayoffErrorCode =
   | "UNSUPPORTED_PLAYOFF_TEAMS"
@@ -63,13 +72,17 @@ export function assertSupportedPlayoffTeams(playoffTeams: number): void {
 /**
  * Derive playoff seeds from the regular-season standings. Seeds are never
  * persisted, so every bracket operation uses this same deterministic source.
+ *
+ * With `divisionWinnersTopSeeds`, the best team in each division is seeded
+ * ahead of every non-winner; the remaining spots go to the best other teams.
  */
 export function derivePlayoffSeeds(options: {
-  teams: StandingsTeam[];
+  teams: PlayoffStandingsTeam[];
   regularSeasonMatchups: StandingsMatchup[];
   playoffTeams: number;
+  divisionWinnersTopSeeds?: boolean;
 }): SeededTeam[] {
-  const { teams, regularSeasonMatchups, playoffTeams } = options;
+  const { teams, regularSeasonMatchups, playoffTeams, divisionWinnersTopSeeds } = options;
   assertSupportedPlayoffTeams(playoffTeams);
   if (teams.length < playoffTeams) {
     throw new PlayoffError(
@@ -78,7 +91,14 @@ export function derivePlayoffSeeds(options: {
     );
   }
 
-  return sortStandings(teams, regularSeasonMatchups)
+  const ordered = divisionWinnersTopSeeds
+    ? sortStandingsWithDivisionWinners(
+        teams.map((team) => ({ ...team, divisionId: team.divisionId ?? null })),
+        regularSeasonMatchups,
+      )
+    : sortStandings(teams, regularSeasonMatchups);
+
+  return ordered
     .slice(0, playoffTeams)
     .map((team, index) => ({ teamId: team.teamId, seed: index + 1 }));
 }
@@ -205,6 +225,7 @@ function standingsInputs(league: {
     ties: number;
     pointsFor: unknown;
     pointsAgainst: unknown;
+    divisionId: string | null;
   }>;
 }, matchups: Array<{
   homeTeamId: string;
@@ -212,11 +233,12 @@ function standingsInputs(league: {
   homeScore: unknown;
   awayScore: unknown;
   isComplete: boolean;
-}>): { teams: StandingsTeam[]; matchups: StandingsMatchup[] } {
+}>): { teams: PlayoffStandingsTeam[]; matchups: StandingsMatchup[] } {
   return {
     teams: league.teams.map((team) => ({
       teamId: team.id,
       name: team.name,
+      divisionId: team.divisionId,
       wins: team.wins,
       losses: team.losses,
       ties: team.ties,
@@ -239,7 +261,14 @@ async function loadLeagueForPlayoffs(leagueId: string) {
     select: {
       id: true,
       season: true,
-      settings: { select: { regularSeasonWeeks: true, playoffTeams: true, playoffStartWeek: true } },
+      settings: {
+        select: {
+          regularSeasonWeeks: true,
+          playoffTeams: true,
+          playoffStartWeek: true,
+          divisionWinnersTopSeeds: true,
+        },
+      },
       teams: {
         select: {
           id: true,
@@ -249,6 +278,7 @@ async function loadLeagueForPlayoffs(leagueId: string) {
           ties: true,
           pointsFor: true,
           pointsAgainst: true,
+          divisionId: true,
         },
       },
     },
@@ -264,10 +294,16 @@ async function loadLeagueForPlayoffs(leagueId: string) {
       "FEWER_TEAMS",
     );
   }
-  return { league, playoffTeams, regularSeasonWeeks, playoffStartWeek };
+  const divisionWinnersTopSeeds = league.settings?.divisionWinnersTopSeeds ?? true;
+  return { league, playoffTeams, regularSeasonWeeks, playoffStartWeek, divisionWinnersTopSeeds };
 }
 
-async function getSeedsForLeague(leagueId: string, season: number, playoffTeams: number) {
+async function getSeedsForLeague(
+  leagueId: string,
+  season: number,
+  playoffTeams: number,
+  divisionWinnersTopSeeds: boolean,
+) {
   const [league, regularSeasonMatchups] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
@@ -281,6 +317,7 @@ async function getSeedsForLeague(leagueId: string, season: number, playoffTeams:
             ties: true,
             pointsFor: true,
             pointsAgainst: true,
+            divisionId: true,
           },
         },
       },
@@ -302,6 +339,7 @@ async function getSeedsForLeague(leagueId: string, season: number, playoffTeams:
     teams: inputs.teams,
     regularSeasonMatchups: inputs.matchups,
     playoffTeams,
+    divisionWinnersTopSeeds,
   });
 }
 
@@ -309,7 +347,7 @@ export async function generatePlayoffBracket(options: {
   leagueId: string;
 }): Promise<{ season: number; playoffTeams: number; week: number; matchups: number }> {
   const { leagueId } = options;
-  const { league, playoffTeams, regularSeasonWeeks, playoffStartWeek } =
+  const { league, playoffTeams, regularSeasonWeeks, playoffStartWeek, divisionWinnersTopSeeds } =
     await loadLeagueForPlayoffs(leagueId);
   const regularSeasonMatchups = await prisma.matchup.findMany({
     where: { leagueId, season: league.season, isPlayoff: false },
@@ -360,6 +398,7 @@ export async function generatePlayoffBracket(options: {
     teams: inputs.teams,
     regularSeasonMatchups: inputs.matchups,
     playoffTeams,
+    divisionWinnersTopSeeds,
   });
   const bySeed = new Map(seeds.map((team) => [team.seed, team.teamId]));
   const pairings = getPlayoffRoundPlan({ playoffTeams, playoffStartWeek });
@@ -395,7 +434,8 @@ export async function advancePlayoffs(options: {
   week: number;
 }): Promise<{ created: number; week: number | null }> {
   const { leagueId, season, week } = options;
-  const { league, playoffTeams, playoffStartWeek } = await loadLeagueForPlayoffs(leagueId);
+  const { league, playoffTeams, playoffStartWeek, divisionWinnersTopSeeds } =
+    await loadLeagueForPlayoffs(leagueId);
   if (league.season !== season) return { created: 0, week: null };
 
   const current = await prisma.matchup.findMany({
@@ -415,7 +455,9 @@ export async function advancePlayoffs(options: {
     return { created: 0, week: null };
   }
 
-  const seeds = seedMap(await getSeedsForLeague(leagueId, season, playoffTeams));
+  const seeds = seedMap(
+    await getSeedsForLeague(leagueId, season, playoffTeams, divisionWinnersTopSeeds),
+  );
   const currentRounds = new Set(
     current.map((matchup) => matchup.playoffRound).filter(
       (round): round is PlayoffRound => round !== null,
@@ -550,8 +592,19 @@ export async function getPlayoffBracket(options: {
     where: { id: options.leagueId },
     select: {
       season: true,
-      settings: { select: { playoffTeams: true } },
-      teams: { select: { id: true, name: true, wins: true, losses: true, ties: true, pointsFor: true, pointsAgainst: true } },
+      settings: { select: { playoffTeams: true, divisionWinnersTopSeeds: true } },
+      teams: {
+        select: {
+          id: true,
+          name: true,
+          wins: true,
+          losses: true,
+          ties: true,
+          pointsFor: true,
+          pointsAgainst: true,
+          divisionId: true,
+        },
+      },
     },
   });
   if (!league) throw new PlayoffError("League not found", "LEAGUE_NOT_FOUND");
@@ -583,6 +636,7 @@ export async function getPlayoffBracket(options: {
     teams: inputs.teams,
     regularSeasonMatchups: inputs.matchups,
     playoffTeams: league.settings?.playoffTeams ?? 6,
+    divisionWinnersTopSeeds: league.settings?.divisionWinnersTopSeeds ?? true,
   }));
   const teamRef = (team: { id: string; name: string }): PlayoffTeamRef => ({
     id: team.id,

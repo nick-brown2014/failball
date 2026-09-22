@@ -32,6 +32,7 @@ const groups = [
       "playoffTeams",
       "playoffStartWeek",
       "tradeDeadlineWeek",
+      "divisionWinnersTopSeeds",
     ],
   },
   {
@@ -132,6 +133,20 @@ const integerFields = new Set([
   "waiverProcessDay",
 ]);
 
+const stringFields = new Set(["waiverType", "divisionWinnersTopSeeds"]);
+
+function toFormValue(field: string, value: unknown): string {
+  if (field === "waiverType") return String(value);
+  if (field === "divisionWinnersTopSeeds") return value ? "true" : "false";
+  return String(parseFloat(String(value)));
+}
+
+function toBodyValue(field: string, value: string): string | number | boolean {
+  if (field === "waiverType") return value;
+  if (field === "divisionWinnersTopSeeds") return value === "true";
+  return Number(value);
+}
+
 const labels: Record<string, string> = {};
 for (const group of groups) {
   for (const field of group.fields) {
@@ -140,6 +155,7 @@ for (const group of groups) {
       .replace(/^./, (value) => value.toUpperCase());
   }
 }
+labels.divisionWinnersTopSeeds = "Division Winners Get Top Seeds";
 
 export default function LeagueSettingsPage() {
   const params = useParams<{ id: string }>();
@@ -163,11 +179,7 @@ export default function LeagueSettingsPage() {
         const values: Record<string, string> = {};
         for (const group of groups) {
           for (const field of group.fields) {
-            const value = data.settings[field];
-            values[field] =
-              field === "waiverType"
-                ? value
-                : String(parseFloat(String(value)));
+            values[field] = toFormValue(field, data.settings[field]);
           }
         }
         setSettings(values);
@@ -190,7 +202,7 @@ export default function LeagueSettingsPage() {
 
     const emptyFields = groups
       .flatMap((group) => group.fields)
-      .filter((field) => field !== "waiverType" && !settings[field]?.trim());
+      .filter((field) => !stringFields.has(field) && !settings[field]?.trim());
 
     if (emptyFields.length > 0) {
       const emptyErrors: Record<string, string> = {};
@@ -203,13 +215,10 @@ export default function LeagueSettingsPage() {
       return;
     }
 
-    const body: Record<string, string | number> = {};
+    const body: Record<string, string | number | boolean> = {};
     for (const group of groups) {
       for (const field of group.fields) {
-        body[field] =
-          field === "waiverType"
-            ? settings[field]
-            : Number(settings[field]);
+        body[field] = toBodyValue(field, settings[field]);
       }
     }
 
@@ -238,10 +247,7 @@ export default function LeagueSettingsPage() {
       const values: Record<string, string> = {};
       for (const group of groups) {
         for (const field of group.fields) {
-          values[field] =
-            field === "waiverType"
-              ? data.settings[field]
-              : String(parseFloat(String(data.settings[field])));
+          values[field] = toFormValue(field, data.settings[field]);
         }
       }
       setSettings(values);
@@ -326,6 +332,18 @@ export default function LeagueSettingsPage() {
                         <option value="ROLLING">Rolling</option>
                         <option value="FAAB">FAAB</option>
                         <option value="RESET_WEEKLY">Reset Weekly</option>
+                      </select>
+                    ) : field === "divisionWinnersTopSeeds" ? (
+                      <select
+                        value={settings[field] || "true"}
+                        disabled={role !== "COMMISSIONER"}
+                        onChange={(event) =>
+                          updateField(field, event.target.value)
+                        }
+                        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
+                      >
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
                       </select>
                     ) : (
                       <input

@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { generateSchedule, getSchedule, ScheduleError } from "@/lib/schedule/service";
-import { sortStandings } from "@/lib/schedule/standings";
+import {
+  divisionWinnerIds,
+  groupStandingsByDivision,
+  sortStandings,
+} from "@/lib/schedule/standings";
 
 async function getMembership(leagueId: string, email: string) {
   const user = await prisma.user.findUnique({
@@ -44,6 +48,10 @@ export async function GET(
             playoffTeams: true,
           },
         },
+        divisions: {
+          select: { id: true, name: true },
+          orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        },
         teams: {
           select: {
             id: true,
@@ -53,6 +61,7 @@ export async function GET(
             ties: true,
             pointsFor: true,
             pointsAgainst: true,
+            divisionId: true,
             user: { select: { id: true, name: true, email: true } },
           },
         },
@@ -93,17 +102,35 @@ export async function GET(
         ties: team.ties,
         pointsFor: Number(team.pointsFor),
         pointsAgainst: Number(team.pointsAgainst),
+        divisionId: team.divisionId,
         user: team.user,
       })),
       allMatchups,
     ).map((team, index) => ({ ...team, rank: index + 1 }));
+
+    const winners = divisionWinnerIds(standings);
+    const rankedStandings = standings.map((team) => ({
+      ...team,
+      isDivisionWinner: winners.has(team.teamId),
+    }));
+    const divisionNames = new Map(league.divisions.map((d) => [d.id, d.name]));
+    const divisionStandings = groupStandingsByDivision(
+      rankedStandings,
+      league.divisions.map((d) => d.id),
+    ).map((group) => ({
+      divisionId: group.divisionId,
+      name: group.divisionId ? divisionNames.get(group.divisionId) ?? "Division" : null,
+      teams: group.teams,
+    }));
 
     return NextResponse.json({
       season: league.season,
       regularSeasonWeeks: league.settings?.regularSeasonWeeks ?? 14,
       playoffTeams: league.settings?.playoffTeams ?? 6,
       weeks,
-      standings,
+      standings: rankedStandings,
+      divisions: league.divisions,
+      divisionStandings,
       role: membership.role,
     });
   } catch (error) {

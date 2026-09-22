@@ -50,9 +50,14 @@ export async function GET(
             ties: true,
             pointsFor: true,
             pointsAgainst: true,
+            divisionId: true,
             user: { select: { id: true, name: true, email: true } },
           },
           orderBy: [{ wins: "desc" }, { pointsFor: "desc" }],
+        },
+        divisions: {
+          select: { id: true, name: true, order: true },
+          orderBy: [{ order: "asc" }, { createdAt: "asc" }],
         },
       },
     });

@@ -116,3 +116,70 @@ export function sortStandings<T extends StandingsTeam>(
     return a.name.localeCompare(b.name);
   });
 }
+
+export interface DivisionStandingsTeam extends StandingsTeam {
+  divisionId: string | null;
+}
+
+export interface DivisionGroup<T> {
+  divisionId: string | null;
+  teams: T[];
+}
+
+/**
+ * Split an already-sorted standings list into per-division groups, preserving
+ * order within each group. Groups follow `divisionOrder`; unassigned teams
+ * (null division) come last. Divisions with no teams are omitted.
+ */
+export function groupStandingsByDivision<T extends DivisionStandingsTeam>(
+  sortedTeams: T[],
+  divisionOrder: string[],
+): DivisionGroup<T>[] {
+  const groups = new Map<string | null, T[]>();
+  for (const id of divisionOrder) groups.set(id, []);
+  for (const team of sortedTeams) {
+    const key = team.divisionId ?? null;
+    const group = groups.get(key);
+    if (group) group.push(team);
+    else groups.set(key, [team]);
+  }
+  const result: DivisionGroup<T>[] = [];
+  for (const [divisionId, teams] of groups) {
+    if (divisionId !== null && teams.length > 0) result.push({ divisionId, teams });
+  }
+  const unassigned = groups.get(null);
+  if (unassigned && unassigned.length > 0) {
+    result.push({ divisionId: null, teams: unassigned });
+  }
+  return result;
+}
+
+/** The top team of each non-null division in the sorted standings. */
+export function divisionWinnerIds<T extends DivisionStandingsTeam>(
+  sortedTeams: T[],
+): Set<string> {
+  const seen = new Set<string>();
+  const winners = new Set<string>();
+  for (const team of sortedTeams) {
+    if (team.divisionId == null || seen.has(team.divisionId)) continue;
+    seen.add(team.divisionId);
+    winners.add(team.teamId);
+  }
+  return winners;
+}
+
+/**
+ * Standings order for playoff seeding: division winners first (ordered among
+ * themselves by the regular tiebreakers), then everyone else.
+ */
+export function sortStandingsWithDivisionWinners<T extends DivisionStandingsTeam>(
+  teams: T[],
+  matchups: StandingsMatchup[],
+): T[] {
+  const sorted = sortStandings(teams, matchups);
+  const winners = divisionWinnerIds(sorted);
+  return [
+    ...sorted.filter((team) => winners.has(team.teamId)),
+    ...sorted.filter((team) => !winners.has(team.teamId)),
+  ];
+}

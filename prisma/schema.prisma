@@ -121,8 +121,24 @@ model League {
   transactions Transaction[]
   invites     LeagueInvite[]
   seasonRecords SeasonRecord[]
+  divisions   Division[]
 
   @@map("leagues")
+}
+
+model Division {
+  id        String   @id @default(cuid())
+  leagueId  String
+  name      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  teams  Team[]
+
+  @@unique([leagueId, name])
+  @@map("divisions")
 }
 
 model LeagueMembership {
@@ -180,6 +196,7 @@ model LeagueSettings {
   playoffTeams       Int @default(6)
   playoffStartWeek   Int @default(15)
   tradeDeadlineWeek  Int @default(11)
+  divisionWinnersTopSeeds Boolean @default(true)
 
   // Waiver Configuration
   waiverProcessDay   Int @default(3)
@@ -274,6 +291,7 @@ model Team {
   name      String
   userId    String
   leagueId  String
+  divisionId String?
   wins      Int      @default(0)
   losses    Int      @default(0)
   ties      Int      @default(0)
@@ -286,6 +304,7 @@ model Team {
 
   user   User   @relation(fields: [userId], references: [id])
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  division Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
 
   roster        RosterSlot[]
   lineupSnapshots LineupSnapshot[]
