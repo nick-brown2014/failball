@@ -103,6 +103,7 @@ const acceptedFields = new Set<string>([
   ...integerFields,
   ...decimalFields,
   "waiverType",
+  "divisionWinnersTopSeeds",
 ]);
 
 function validateSettings(body: Record<string, unknown>) {
@@ -138,6 +139,14 @@ function validateSettings(body: Record<string, unknown>) {
       errors.push({ field: "waiverType", message: "Waiver type must be ROLLING, FAAB, or RESET_WEEKLY" });
     } else {
       data.waiverType = body.waiverType;
+    }
+  }
+
+  if ("divisionWinnersTopSeeds" in body) {
+    if (typeof body.divisionWinnersTopSeeds !== "boolean") {
+      errors.push({ field: "divisionWinnersTopSeeds", message: "Must be true or false" });
+    } else {
+      data.divisionWinnersTopSeeds = body.divisionWinnersTopSeeds;
     }
   }
 

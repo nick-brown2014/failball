@@ -7,6 +7,13 @@ import { useCallback, useEffect, useState } from "react";
 interface Team {
   id: string;
   name: string;
+  divisionId: string | null;
+}
+
+interface Division {
+  id: string;
+  name: string;
+  order: number;
 }
 
 interface Member {
@@ -16,7 +23,12 @@ interface Member {
 
 interface LeaguePayload {
   role: string;
-  league: { name: string; teams: Team[]; memberships: Member[] };
+  league: {
+    name: string;
+    teams: Team[];
+    memberships: Member[];
+    divisions: Division[];
+  };
 }
 
 interface RosterSlot {
@@ -438,6 +450,127 @@ function MembersSection({
   );
 }
 
+interface DivisionsSectionProps {
+  divisions: Division[];
+  teams: Team[];
+  busy: string;
+  onCreate: (name: string) => void;
+  onRename: (division: Division) => void;
+  onDelete: (division: Division) => void;
+  onAssign: (team: Team, divisionId: string | null) => void;
+}
+
+function DivisionsSection({
+  divisions,
+  teams,
+  busy,
+  onCreate,
+  onRename,
+  onDelete,
+  onAssign,
+}: DivisionsSectionProps) {
+  const [newName, setNewName] = useState("");
+
+  return (
+    <section className="mt-6 rounded-lg bg-white p-5 shadow dark:bg-gray-800">
+      <h2 className="text-xl font-semibold">Divisions</h2>
+      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        Standings are grouped by division and the schedule favors
+        intra-division matchups. Regenerate the schedule after changing
+        assignments.
+      </p>
+      <form
+        className="mt-3 flex flex-wrap gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!newName.trim()) return;
+          onCreate(newName.trim());
+          setNewName("");
+        }}
+      >
+        <input
+          className="rounded border px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+          placeholder="New division name"
+          maxLength={40}
+          value={newName}
+          onChange={(event) => setNewName(event.target.value)}
+        />
+        <button
+          type="submit"
+          className="rounded bg-orange-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          disabled={!!busy || !newName.trim()}
+        >
+          Add Division
+        </button>
+      </form>
+      {divisions.length > 0 && (
+        <ul className="mt-3 divide-y dark:divide-gray-700">
+          {divisions.map((division) => (
+            <li
+              key={division.id}
+              className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+            >
+              <span>
+                {division.name}{" "}
+                <span className="text-gray-500">
+                  ({teams.filter((team) => team.divisionId === division.id).length}{" "}
+                  teams)
+                </span>
+              </span>
+              <span className="flex gap-2">
+                <button
+                  className="text-orange-600 disabled:opacity-50"
+                  disabled={!!busy}
+                  onClick={() => onRename(division)}
+                >
+                  Rename
+                </button>
+                <button
+                  className="text-red-600 disabled:opacity-50"
+                  disabled={!!busy}
+                  onClick={() => onDelete(division)}
+                >
+                  Delete
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {divisions.length > 0 && (
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold">Team assignments</h3>
+          <ul className="mt-2 divide-y dark:divide-gray-700">
+            {teams.map((team) => (
+              <li
+                key={team.id}
+                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+              >
+                <span>{team.name}</span>
+                <select
+                  className="rounded border px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-700"
+                  value={team.divisionId ?? ""}
+                  disabled={!!busy}
+                  onChange={(event) =>
+                    onAssign(team, event.target.value || null)
+                  }
+                >
+                  <option value="">No division</option>
+                  {divisions.map((division) => (
+                    <option key={division.id} value={division.id}>
+                      {division.name}
+                    </option>
+                  ))}
+                </select>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function CommissionerPage() {
   const { id } = useParams<{ id: string }>();
   const [league, setLeague] = useState<LeaguePayload | null>(null);
@@ -535,6 +668,64 @@ export default function CommissionerPage() {
         }),
       });
       await Promise.all([loadRoster(), loadActivity()]);
+    });
+  };
+
+  const handleDivisionCreate = (name: string) => {
+    void perform("division:create", async () => {
+      await jsonRequest(`/api/leagues/${id}/commissioner/divisions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      await loadLeague();
+    });
+  };
+
+  const handleDivisionRename = (division: Division) => {
+    const name = window.prompt("Division name", division.name)?.trim();
+    if (!name || name === division.name) return;
+    void perform(`division:rename:${division.id}`, async () => {
+      await jsonRequest(
+        `/api/leagues/${id}/commissioner/divisions/${division.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        },
+      );
+      await loadLeague();
+    });
+  };
+
+  const handleDivisionDelete = (division: Division) => {
+    if (
+      !window.confirm(
+        `Delete the ${division.name} division? Its teams will become unassigned.`,
+      )
+    ) {
+      return;
+    }
+    void perform(`division:delete:${division.id}`, async () => {
+      await jsonRequest(
+        `/api/leagues/${id}/commissioner/divisions/${division.id}`,
+        { method: "DELETE" },
+      );
+      await loadLeague();
+    });
+  };
+
+  const handleDivisionAssign = (team: Team, divisionId: string | null) => {
+    void perform(`division:assign:${team.id}`, async () => {
+      await jsonRequest(
+        `/api/leagues/${id}/commissioner/teams/${team.id}/division`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ divisionId }),
+        },
+      );
+      await loadLeague();
     });
   };
 
@@ -755,6 +946,15 @@ export default function CommissionerPage() {
           trades={trades}
           busy={busy}
           onTradeAction={handleTradeAction}
+        />
+        <DivisionsSection
+          divisions={league.league.divisions ?? []}
+          teams={league.league.teams}
+          busy={busy}
+          onCreate={handleDivisionCreate}
+          onRename={handleDivisionRename}
+          onDelete={handleDivisionDelete}
+          onAssign={handleDivisionAssign}
         />
         <MembersSection
           members={league.league.memberships}

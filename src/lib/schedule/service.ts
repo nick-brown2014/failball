@@ -5,7 +5,13 @@
 
 import { DraftStatus, GameStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { generateRoundRobinSchedule, shuffleTeamIds } from "./generate";
+import {
+  generateDivisionWeightedSchedule,
+  shuffleTeamIds,
+  type DivisionMap,
+} from "./generate";
+
+const SCHEDULE_CANDIDATES = 32;
 
 export interface ScheduleWeek {
   week: number;
@@ -91,7 +97,10 @@ export async function generateSchedule(options: {
       id: true,
       season: true,
       settings: { select: { regularSeasonWeeks: true } },
-      teams: { select: { id: true }, orderBy: { createdAt: "asc" } },
+      teams: {
+        select: { id: true, divisionId: true },
+        orderBy: { createdAt: "asc" },
+      },
       drafts: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
@@ -138,11 +147,22 @@ export async function generateSchedule(options: {
 
   const weeks = league.settings?.regularSeasonWeeks ?? 14;
   const seed = options.seed ?? hashSeed(`${leagueId}:${season}`);
-  const teamIds = shuffleTeamIds(
-    league.teams.map((team) => team.id),
-    seed,
+  const divisions: DivisionMap = Object.fromEntries(
+    league.teams.map((team) => [team.id, team.divisionId]),
   );
-  const scheduled = generateRoundRobinSchedule({ teamIds, weeks });
+  const hasDivisions = league.teams.some((team) => team.divisionId != null);
+  const baseIds = league.teams.map((team) => team.id);
+  // Without divisions every order scores the same, so a single shuffle keeps
+  // the historical output for a given seed.
+  const candidateOrders = Array.from(
+    { length: hasDivisions ? SCHEDULE_CANDIDATES : 1 },
+    (_, i) => shuffleTeamIds(baseIds, (seed + i * 0x9e3779b9) >>> 0),
+  );
+  const scheduled = generateDivisionWeightedSchedule({
+    candidateOrders,
+    weeks,
+    divisions,
+  });
 
   await prisma.$transaction(async (tx) => {
     await tx.matchup.deleteMany({ where: { leagueId, season, isPlayoff: false } });

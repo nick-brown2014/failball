@@ -14,12 +14,22 @@ interface StandingsRow {
   ties: number;
   pointsFor: number;
   pointsAgainst: number;
+  divisionId: string | null;
+  isDivisionWinner: boolean;
   user: { id: string; name: string | null; email: string };
+}
+
+interface DivisionStandings {
+  divisionId: string | null;
+  name: string | null;
+  teams: StandingsRow[];
 }
 
 interface ScheduleData {
   season: number;
   standings: StandingsRow[];
+  divisions: Array<{ id: string; name: string }>;
+  divisionStandings: DivisionStandings[];
 }
 
 interface LeagueData {
@@ -105,6 +115,8 @@ export default function StandingsPage() {
     );
   }
 
+  const hasDivisions = (schedule.divisions?.length ?? 0) > 0;
+
   return (
     <div className="min-h-screen w-full font-sans">
       <main className="mx-auto max-w-6xl px-4 py-8">
@@ -119,54 +131,109 @@ export default function StandingsPage() {
             {error}
           </div>
         )}
-        <div className="overflow-x-auto rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b dark:border-gray-700">
-                <th className="px-2 py-3 text-left">Rank</th>
-                <th className="px-2 py-3 text-left">Team</th>
-                <th className="px-2 py-3 text-left">Owner</th>
-                <th className="px-2 py-3 text-center">W</th>
-                <th className="px-2 py-3 text-center">L</th>
-                <th className="px-2 py-3 text-center">T</th>
-                <th className="px-2 py-3 text-right">PF</th>
-                <th className="px-2 py-3 text-right">PA</th>
-                <th className="px-2 py-3 text-right">Roster</th>
-              </tr>
-            </thead>
-            <tbody>
-              {schedule.standings.map((team) => {
-                const isViewer = team.user.id === userId;
-                return (
-                  <tr
-                    key={team.teamId}
-                    className={`border-b dark:border-gray-700 ${isViewer ? "bg-orange-50 dark:bg-orange-900/20" : ""}`}
-                  >
-                    <td className="px-2 py-3 font-medium">{team.rank}</td>
-                    <td className="px-2 py-3 font-medium">
-                      {team.name}
-                      {isViewer && <span className="ml-2 text-xs text-orange-600">(You)</span>}
-                    </td>
-                    <td className="px-2 py-3 text-gray-600 dark:text-gray-400">
-                      {team.user.name || team.user.email}
-                    </td>
-                    <td className="px-2 py-3 text-center font-medium text-green-600">{team.wins}</td>
-                    <td className="px-2 py-3 text-center font-medium text-red-600">{team.losses}</td>
-                    <td className="px-2 py-3 text-center text-gray-500">{team.ties}</td>
-                    <td className="px-2 py-3 text-right">{Number(team.pointsFor).toFixed(1)}</td>
-                    <td className="px-2 py-3 text-right text-gray-500">{Number(team.pointsAgainst).toFixed(1)}</td>
-                    <td className="px-2 py-3 text-right">
-                      <Link href={`/leagues/${params.id}/teams/${team.teamId}`} className="text-orange-600 hover:text-orange-500">
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {hasDivisions ? (
+          <div className="space-y-6">
+            {schedule.divisionStandings.map((group) => (
+              <section key={group.divisionId ?? "unassigned"}>
+                <h2 className="mb-2 text-xl font-semibold">
+                  {group.name ?? "No Division"}
+                </h2>
+                <StandingsTable
+                  leagueId={params.id}
+                  teams={group.teams}
+                  userId={userId}
+                  showDivisionWinner
+                />
+              </section>
+            ))}
+            <section>
+              <h2 className="mb-2 text-xl font-semibold">Overall</h2>
+              <StandingsTable
+                leagueId={params.id}
+                teams={schedule.standings}
+                userId={userId}
+                showDivisionWinner
+              />
+            </section>
+          </div>
+        ) : (
+          <StandingsTable
+            leagueId={params.id}
+            teams={schedule.standings}
+            userId={userId}
+          />
+        )}
       </main>
+    </div>
+  );
+}
+
+function StandingsTable({
+  leagueId,
+  teams,
+  userId,
+  showDivisionWinner = false,
+}: {
+  leagueId: string;
+  teams: StandingsRow[];
+  userId: string;
+  showDivisionWinner?: boolean;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b dark:border-gray-700">
+            <th className="px-2 py-3 text-left">Rank</th>
+            <th className="px-2 py-3 text-left">Team</th>
+            <th className="px-2 py-3 text-left">Owner</th>
+            <th className="px-2 py-3 text-center">W</th>
+            <th className="px-2 py-3 text-center">L</th>
+            <th className="px-2 py-3 text-center">T</th>
+            <th className="px-2 py-3 text-right">PF</th>
+            <th className="px-2 py-3 text-right">PA</th>
+            <th className="px-2 py-3 text-right">Roster</th>
+          </tr>
+        </thead>
+        <tbody>
+          {teams.map((team) => {
+            const isViewer = team.user.id === userId;
+            return (
+              <tr
+                key={team.teamId}
+                className={`border-b dark:border-gray-700 ${isViewer ? "bg-orange-50 dark:bg-orange-900/20" : ""}`}
+              >
+                <td className="px-2 py-3 font-medium">{team.rank}</td>
+                <td className="px-2 py-3 font-medium">
+                  {team.name}
+                  {isViewer && <span className="ml-2 text-xs text-orange-600">(You)</span>}
+                  {showDivisionWinner && team.isDivisionWinner && (
+                    <span
+                      title="Division leader"
+                      className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                    >
+                      DIV
+                    </span>
+                  )}
+                </td>
+                <td className="px-2 py-3 text-gray-600 dark:text-gray-400">
+                  {team.user.name || team.user.email}
+                </td>
+                <td className="px-2 py-3 text-center font-medium text-green-600">{team.wins}</td>
+                <td className="px-2 py-3 text-center font-medium text-red-600">{team.losses}</td>
+                <td className="px-2 py-3 text-center text-gray-500">{team.ties}</td>
+                <td className="px-2 py-3 text-right">{Number(team.pointsFor).toFixed(1)}</td>
+                <td className="px-2 py-3 text-right text-gray-500">{Number(team.pointsAgainst).toFixed(1)}</td>
+                <td className="px-2 py-3 text-right">
+                  <Link href={`/leagues/${leagueId}/teams/${team.teamId}`} className="text-orange-600 hover:text-orange-500">
+                    View
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
