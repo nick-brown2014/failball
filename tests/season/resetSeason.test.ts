@@ -43,7 +43,9 @@ const game = (options: {
   winnerId: string;
 }): PlayoffBracketGame => ({
   id: `${options.round}-${options.home}-${options.away}`,
+  legIds: [`${options.round}-${options.home}-${options.away}`],
   week: options.week,
+  weeks: [options.week],
   playoffRound: options.round,
   homeTeam: teamRef(options.home, 1),
   awayTeam: teamRef(options.away, 2),
@@ -79,11 +81,19 @@ const completeBracket = (): PlayoffBracket => {
   ];
   return {
     rounds: [
-      { week: 15, playoffRound: PlayoffRound.SEMIFINAL, games: games.slice(0, 2) },
-      { week: 16, playoffRound: PlayoffRound.CHAMPIONSHIP, games: games.slice(2) },
+      { bracket: "MAIN", week: 15, weeks: [15], playoffRound: PlayoffRound.SEMIFINAL, games: games.slice(0, 2) },
+      { bracket: "MAIN", week: 16, weeks: [16], playoffRound: PlayoffRound.CHAMPIONSHIP, games: games.slice(2) },
     ],
     champion: teamRef("t1", 1),
     thirdPlaceWinner: null,
+    consolationWinner: null,
+    config: {
+      playoffTeams: 4,
+      byes: 0,
+      reseed: true,
+      championshipWeeks: 1,
+      consolation: false,
+    },
   };
 };
 

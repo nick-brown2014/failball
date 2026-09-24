@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { playoffByes } from "@/lib/schedule/playoffFormat";
 
 interface ValidationError {
   field: string;
@@ -31,6 +32,9 @@ const groups = [
       "regularSeasonWeeks",
       "playoffTeams",
       "playoffStartWeek",
+      "championshipWeeks",
+      "playoffReseed",
+      "playoffConsolation",
       "tradeDeadlineWeek",
     ],
   },
@@ -128,9 +132,12 @@ const integerFields = new Set([
   "regularSeasonWeeks",
   "playoffTeams",
   "playoffStartWeek",
+  "championshipWeeks",
   "tradeDeadlineWeek",
   "waiverProcessDay",
 ]);
+
+const booleanFields = new Set(["playoffReseed", "playoffConsolation"]);
 
 const labels: Record<string, string> = {};
 for (const group of groups) {
@@ -139,6 +146,21 @@ for (const group of groups) {
       .replace(/([A-Z])/g, " $1")
       .replace(/^./, (value) => value.toUpperCase());
   }
+}
+Object.assign(labels, {
+  playoffTeams: "Playoff teams (2\u20138)",
+  playoffReseed: "Reseed after each round",
+  playoffConsolation: "Consolation bracket",
+  championshipWeeks: "Championship weeks (1\u20132)",
+});
+
+const isSpecialField = (field: string) =>
+  field === "waiverType" || booleanFields.has(field);
+
+function fieldToString(field: string, value: unknown): string {
+  if (field === "waiverType") return String(value);
+  if (booleanFields.has(field)) return value ? "true" : "false";
+  return String(parseFloat(String(value)));
 }
 
 export default function LeagueSettingsPage() {
@@ -163,11 +185,7 @@ export default function LeagueSettingsPage() {
         const values: Record<string, string> = {};
         for (const group of groups) {
           for (const field of group.fields) {
-            const value = data.settings[field];
-            values[field] =
-              field === "waiverType"
-                ? value
-                : String(parseFloat(String(value)));
+            values[field] = fieldToString(field, data.settings[field]);
           }
         }
         setSettings(values);
@@ -190,7 +208,7 @@ export default function LeagueSettingsPage() {
 
     const emptyFields = groups
       .flatMap((group) => group.fields)
-      .filter((field) => field !== "waiverType" && !settings[field]?.trim());
+      .filter((field) => !isSpecialField(field) && !settings[field]?.trim());
 
     if (emptyFields.length > 0) {
       const emptyErrors: Record<string, string> = {};
@@ -203,13 +221,15 @@ export default function LeagueSettingsPage() {
       return;
     }
 
-    const body: Record<string, string | number> = {};
+    const body: Record<string, string | number | boolean> = {};
     for (const group of groups) {
       for (const field of group.fields) {
         body[field] =
           field === "waiverType"
             ? settings[field]
-            : Number(settings[field]);
+            : booleanFields.has(field)
+              ? settings[field] === "true"
+              : Number(settings[field]);
       }
     }
 
@@ -238,10 +258,7 @@ export default function LeagueSettingsPage() {
       const values: Record<string, string> = {};
       for (const group of groups) {
         for (const field of group.fields) {
-          values[field] =
-            field === "waiverType"
-              ? data.settings[field]
-              : String(parseFloat(String(data.settings[field])));
+          values[field] = fieldToString(field, data.settings[field]);
         }
       }
       setSettings(values);
@@ -327,6 +344,18 @@ export default function LeagueSettingsPage() {
                         <option value="FAAB">FAAB</option>
                         <option value="RESET_WEEKLY">Reset Weekly</option>
                       </select>
+                    ) : booleanFields.has(field) ? (
+                      <select
+                        value={settings[field] || "false"}
+                        disabled={role !== "COMMISSIONER"}
+                        onChange={(event) =>
+                          updateField(field, event.target.value)
+                        }
+                        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
+                      >
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
                     ) : (
                       <input
                         type="number"
@@ -338,6 +367,18 @@ export default function LeagueSettingsPage() {
                         }
                         className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
                       />
+                    )}
+                    {field === "playoffTeams" && (
+                      <span className="block text-xs text-gray-500 dark:text-gray-400">
+                        {(() => {
+                          const count = Number(settings[field]);
+                          if (!Number.isInteger(count) || count < 2) return null;
+                          const byes = playoffByes(count);
+                          return byes > 0
+                            ? `Top ${byes} seed(s) get a first-round bye`
+                            : "No first-round byes";
+                        })()}
+                      </span>
                     )}
                     {fieldErrors[field] && (
                       <span className="text-sm text-red-600">

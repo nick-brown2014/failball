@@ -22,6 +22,7 @@ const integerFields = [
   "regularSeasonWeeks",
   "playoffTeams",
   "playoffStartWeek",
+  "championshipWeeks",
   "tradeDeadlineWeek",
   "waiverProcessDay",
 ] as const;
@@ -41,8 +42,9 @@ const integerRanges: Record<
   defSlots: { min: 0, max: 20 },
   irSlots: { min: 0, max: 20 },
   regularSeasonWeeks: { min: 1, max: 40 },
-  playoffTeams: { min: 2, max: 20 },
+  playoffTeams: { min: 2, max: 8 },
   playoffStartWeek: { min: 1, max: 40 },
+  championshipWeeks: { min: 1, max: 2 },
   tradeDeadlineWeek: { min: 0, max: 40 },
   waiverProcessDay: { min: 0, max: 6 },
 };
@@ -99,9 +101,15 @@ const decimalFields = [
   "stPenaltyExtendDrive",
 ] as const;
 
+const booleanFields = [
+  "playoffReseed",
+  "playoffConsolation",
+] as const;
+
 const acceptedFields = new Set<string>([
   ...integerFields,
   ...decimalFields,
+  ...booleanFields,
   "waiverType",
 ]);
 
@@ -128,6 +136,16 @@ function validateSettings(body: Record<string, unknown>) {
         field,
         message: `Must be an integer between ${range.min} and ${range.max}`,
       });
+    } else {
+      data[field] = value;
+    }
+  }
+
+  for (const field of booleanFields) {
+    if (!(field in body)) continue;
+    const value = body[field];
+    if (typeof value !== "boolean") {
+      errors.push({ field, message: "Must be a boolean" });
     } else {
       data[field] = value;
     }

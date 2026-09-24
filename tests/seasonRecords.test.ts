@@ -26,7 +26,9 @@ const game = (options: {
   isComplete?: boolean;
 }): PlayoffBracketGame => ({
   id: `${options.round}-${options.home}-${options.away}`,
+  legIds: [`${options.round}-${options.home}-${options.away}`],
   week: options.week,
+  weeks: [options.week],
   playoffRound: options.round,
   homeTeam: teamRef(options.home, 1),
   awayTeam: teamRef(options.away, 2),
@@ -44,12 +46,26 @@ const bracket = (games: PlayoffBracketGame[], champion: string | null): PlayoffB
         candidate.playoffRound === entry.playoffRound && candidate.week === entry.week,
     );
     if (round) round.games.push(entry);
-    else rounds.push({ week: entry.week, playoffRound: entry.playoffRound, games: [entry] });
+    else rounds.push({
+      bracket: entry.playoffRound === PlayoffRound.CONSOLATION ? "CONSOLATION" : "MAIN",
+      week: entry.week,
+      weeks: [entry.week],
+      playoffRound: entry.playoffRound,
+      games: [entry],
+    });
   }
   return {
     rounds,
     champion: champion ? teamRef(champion, 1) : null,
     thirdPlaceWinner: null,
+    consolationWinner: null,
+    config: {
+      playoffTeams: 6,
+      byes: 2,
+      reseed: true,
+      championshipWeeks: 1,
+      consolation: rounds.some((round) => round.bracket === "CONSOLATION"),
+    },
   };
 };
 
@@ -123,6 +139,28 @@ describe("derivePlayoffResults", () => {
     expect(results.get("t4")).toBe(PlayoffResult.QUARTERFINAL);
     expect(results.get("t6")).toBe(PlayoffResult.QUARTERFINAL);
     expect(results.get("t7")).toBe(PlayoffResult.MISSED_PLAYOFFS);
+  });
+
+  it("does not promote consolation participants out of MISSED_PLAYOFFS", () => {
+    const withConsolation = bracket(
+      [
+        ...sixTeamBracket().rounds.flatMap((round) => round.games),
+        game({
+          round: PlayoffRound.CONSOLATION,
+          week: 15,
+          home: "t7",
+          away: "t8",
+          winnerId: "t7",
+        }),
+      ],
+      "t3",
+    );
+    const results = derivePlayoffResults({
+      teamIds: ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"],
+      bracket: withConsolation,
+    });
+    expect(results.get("t7")).toBe(PlayoffResult.MISSED_PLAYOFFS);
+    expect(results.get("t8")).toBe(PlayoffResult.MISSED_PLAYOFFS);
   });
 
   it("marks everyone as missing the playoffs without a bracket", () => {
