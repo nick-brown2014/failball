@@ -86,27 +86,82 @@ interface PlayoffTeamRef {
   seed: number | null;
 }
 
+type PlayoffRoundName =
+  | "WILDCARD"
+  | "SEMIFINAL"
+  | "CHAMPIONSHIP"
+  | "THIRD_PLACE"
+  | "CONSOLATION_SEMIFINAL"
+  | "FIFTH_PLACE"
+  | "SEVENTH_PLACE"
+  | "NINTH_PLACE";
+
+interface PlayoffLeg {
+  id: string;
+  week: number;
+  playoffLeg: number;
+  homeScore: number | null;
+  awayScore: number | null;
+  isComplete: boolean;
+}
+
 interface PlayoffGame {
   id: string;
   week: number;
-  playoffRound: "WILDCARD" | "SEMIFINAL" | "CHAMPIONSHIP" | "THIRD_PLACE";
+  playoffRound: PlayoffRoundName;
+  playoffBracket: "MAIN" | "CONSOLATION";
   homeTeam: PlayoffTeamRef;
   awayTeam: PlayoffTeamRef;
   homeScore: number | null;
   awayScore: number | null;
   isComplete: boolean;
   winnerId: string | null;
+  legs: PlayoffLeg[];
 }
 
 interface PlayoffBracket {
   rounds: Array<{
     week: number;
-    playoffRound: PlayoffGame["playoffRound"];
+    playoffRound: PlayoffRoundName;
+    games: PlayoffGame[];
+    byes?: PlayoffTeamRef[];
+  }>;
+  consolationRounds: Array<{
+    week: number;
+    playoffRound: PlayoffRoundName;
     games: PlayoffGame[];
   }>;
   champion: PlayoffTeamRef | null;
   thirdPlaceWinner: PlayoffTeamRef | null;
 }
+
+interface PlayoffConfig {
+  playoffByeTeams: number;
+  playoffReseed: boolean;
+  consolationBracket: boolean;
+  championshipWeeks: number;
+}
+
+const playoffRoundLabel = (round: PlayoffRoundName): string => {
+  switch (round) {
+    case "WILDCARD":
+      return "Wildcard";
+    case "SEMIFINAL":
+      return "Semifinals";
+    case "THIRD_PLACE":
+      return "Third Place";
+    case "CONSOLATION_SEMIFINAL":
+      return "Consolation Semifinal";
+    case "FIFTH_PLACE":
+      return "5th Place";
+    case "SEVENTH_PLACE":
+      return "7th Place";
+    case "NINTH_PLACE":
+      return "9th Place";
+    default:
+      return "Championship";
+  }
+};
 
 export default function LeaguePage() {
   const params = useParams<{ id: string }>();
@@ -126,6 +181,7 @@ export default function LeaguePage() {
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [playoffBracket, setPlayoffBracket] = useState<PlayoffBracket | null>(null);
   const [playoffTeams, setPlayoffTeams] = useState(6);
+  const [playoffConfig, setPlayoffConfig] = useState<PlayoffConfig | null>(null);
   const [playoffError, setPlayoffError] = useState("");
   const [generatingPlayoffs, setGeneratingPlayoffs] = useState(false);
   const [activity, setActivity] = useState<ActivityTransaction[]>([]);
@@ -182,6 +238,7 @@ export default function LeaguePage() {
     }
     setPlayoffBracket(data.bracket);
     setPlayoffTeams(data.playoffTeams ?? 6);
+    setPlayoffConfig(data.config ?? null);
   }, [params.id]);
 
   useEffect(() => {
@@ -767,7 +824,13 @@ export default function LeaguePage() {
               <div>
                 <h2 className="text-xl font-semibold">Playoffs</h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Top {playoffTeams} teams, reseeded each round
+                  Top {playoffTeams} teams,{" "}
+                  {playoffConfig?.playoffReseed === false
+                    ? "fixed bracket"
+                    : "reseeded each round"}
+                  {playoffConfig && playoffConfig.championshipWeeks > 1
+                    ? `, ${playoffConfig.championshipWeeks}-week championship`
+                    : ""}
                 </p>
               </div>
               {role === "COMMISSIONER" && (
@@ -788,16 +851,24 @@ export default function LeaguePage() {
                 {playoffBracket.rounds.map((round) => (
                   <div key={`${round.playoffRound}-${round.week}`} className="w-56 shrink-0">
                     <h3 className="mb-2 text-sm font-semibold">
-                      {round.playoffRound === "WILDCARD"
-                        ? "Wildcard"
-                        : round.playoffRound === "SEMIFINAL"
-                          ? "Semifinals"
-                          : round.playoffRound === "THIRD_PLACE"
-                            ? "Third Place"
-                            : "Championship"}
-                      <span className="ml-1 font-normal text-gray-500">W{round.week}</span>
+                      {playoffRoundLabel(round.playoffRound)}
+                      <span className="ml-1 font-normal text-gray-500">
+                        {round.games.some((game) => game.legs.length > 1)
+                          ? `W${round.week}–${round.week + round.games[0].legs.length - 1}`
+                          : `W${round.week}`}
+                      </span>
                     </h3>
                     <div className="space-y-3">
+                      {round.byes?.map((team) => (
+                        <div
+                          key={`bye-${team.id}`}
+                          className="block rounded border border-dashed border-gray-300 p-3 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
+                        >
+                          <span className="mr-1 text-xs">({team.seed ?? "—"})</span>
+                          {team.name}
+                          <span className="ml-2 text-xs font-semibold">BYE</span>
+                        </div>
+                      ))}
                       {round.games.map((game) => {
                         const teamRow = (team: PlayoffTeamRef, score: number | null) => (
                           <div
@@ -826,6 +897,19 @@ export default function LeaguePage() {
                           >
                             {teamRow(game.awayTeam, game.awayScore)}
                             {teamRow(game.homeTeam, game.homeScore)}
+                            {game.legs.length > 1 && (
+                              <div className="mt-1 space-y-0.5 border-t border-gray-100 pt-1 text-xs text-gray-500 dark:border-gray-700">
+                                {game.legs.map((leg) => (
+                                  <p key={leg.id}>
+                                    W{leg.week}: {leg.awayScore == null ? "—" : leg.awayScore.toFixed(1)}
+                                    {" – "}
+                                    {leg.homeScore == null ? "—" : leg.homeScore.toFixed(1)}
+                                    {leg.isComplete ? "" : " (in progress)"}
+                                  </p>
+                                ))}
+                                <p className="font-medium">Total shown above</p>
+                              </div>
+                            )}
                             <p className="mt-1 text-xs text-gray-500">
                               {game.isComplete ? "Final" : "Not played"}
                             </p>
@@ -837,6 +921,68 @@ export default function LeaguePage() {
                 ))}
               </div>
             </div>
+            {playoffBracket.consolationRounds.length > 0 && (
+              <div className="mt-6 border-t pt-4 dark:border-gray-700">
+                <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Consolation ladder
+                </h3>
+                <div className="overflow-x-auto pb-2">
+                  <div className="flex min-w-max gap-4">
+                    {playoffBracket.consolationRounds.map((round) => (
+                      <div key={`consolation-${round.playoffRound}-${round.week}`} className="w-56 shrink-0">
+                        <h4 className="mb-2 text-sm font-semibold">
+                          {playoffRoundLabel(round.playoffRound)}
+                          <span className="ml-1 font-normal text-gray-500">W{round.week}</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {round.games.map((game) => (
+                            <Link
+                              key={game.id}
+                              href={`/leagues/${league.id}/matchups/${game.id}`}
+                              className="block rounded border border-gray-200 p-3 text-sm hover:border-orange-500 dark:border-gray-700"
+                            >
+                              <div
+                                className={`flex items-center justify-between gap-2 ${
+                                  game.winnerId === game.awayTeam.id
+                                    ? "font-bold text-orange-700 dark:text-orange-300"
+                                    : ""
+                                }`}
+                              >
+                                <span className="min-w-0 truncate">
+                                  <span className="mr-1 text-xs text-gray-500">
+                                    ({game.awayTeam.seed ?? "—"})
+                                  </span>
+                                  {game.awayTeam.name}
+                                </span>
+                                <span>{game.awayScore == null ? "—" : game.awayScore.toFixed(1)}</span>
+                              </div>
+                              <div
+                                className={`flex items-center justify-between gap-2 ${
+                                  game.winnerId === game.homeTeam.id
+                                    ? "font-bold text-orange-700 dark:text-orange-300"
+                                    : ""
+                                }`}
+                              >
+                                <span className="min-w-0 truncate">
+                                  <span className="mr-1 text-xs text-gray-500">
+                                    ({game.homeTeam.seed ?? "—"})
+                                  </span>
+                                  {game.homeTeam.name}
+                                </span>
+                                <span>{game.homeScore == null ? "—" : game.homeScore.toFixed(1)}</span>
+                              </div>
+                              <p className="mt-1 text-xs text-gray-500">
+                                {game.isComplete ? "Final" : "Not played"}
+                              </p>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             {(playoffBracket.champion || playoffBracket.thirdPlaceWinner) && (
               <div className="mt-4 flex flex-wrap gap-4 border-t pt-4 text-sm dark:border-gray-700">
                 {playoffBracket.champion && (

@@ -31,7 +31,9 @@ export function checkPlayoffsComplete(bracket: PlayoffBracket | null): PlayoffCo
     };
   }
 
-  const games = bracket.rounds.flatMap((round) => round.games);
+  const games = [...bracket.rounds, ...bracket.consolationRounds].flatMap(
+    (round) => round.games,
+  );
   const championship = games.find(
     (game) => game.playoffRound === PlayoffRound.CHAMPIONSHIP,
   );
@@ -58,14 +60,21 @@ const ROUND_RESULT: Record<PlayoffRound, PlayoffResult> = {
   [PlayoffRound.SEMIFINAL]: PlayoffResult.SEMIFINAL,
   [PlayoffRound.THIRD_PLACE]: PlayoffResult.SEMIFINAL,
   [PlayoffRound.CHAMPIONSHIP]: PlayoffResult.RUNNER_UP,
+  [PlayoffRound.CONSOLATION_SEMIFINAL]: PlayoffResult.SEVENTH_PLACE,
+  [PlayoffRound.FIFTH_PLACE]: PlayoffResult.FIFTH_PLACE,
+  [PlayoffRound.SEVENTH_PLACE]: PlayoffResult.SEVENTH_PLACE,
+  [PlayoffRound.NINTH_PLACE]: PlayoffResult.NINTH_PLACE,
 };
 
 const RESULT_RANK: Record<PlayoffResult, number> = {
-  [PlayoffResult.CHAMPION]: 6,
-  [PlayoffResult.RUNNER_UP]: 5,
-  [PlayoffResult.THIRD_PLACE]: 4,
-  [PlayoffResult.SEMIFINAL]: 3,
-  [PlayoffResult.QUARTERFINAL]: 2,
+  [PlayoffResult.CHAMPION]: 12,
+  [PlayoffResult.RUNNER_UP]: 10,
+  [PlayoffResult.THIRD_PLACE]: 8,
+  [PlayoffResult.SEMIFINAL]: 6,
+  [PlayoffResult.FIFTH_PLACE]: 5,
+  [PlayoffResult.QUARTERFINAL]: 4,
+  [PlayoffResult.SEVENTH_PLACE]: 3,
+  [PlayoffResult.NINTH_PLACE]: 2,
   [PlayoffResult.MISSED_PLAYOFFS]: 1,
 };
 
@@ -94,7 +103,7 @@ export function derivePlayoffResults(options: {
     if (RESULT_RANK[result] > RESULT_RANK[current]) results.set(teamId, result);
   };
 
-  for (const round of options.bracket.rounds) {
+  for (const round of [...options.bracket.rounds, ...options.bracket.consolationRounds]) {
     for (const game of round.games) {
       // Every participant is at least credited with reaching this round.
       promote(game.homeTeam.id, ROUND_RESULT[game.playoffRound]);

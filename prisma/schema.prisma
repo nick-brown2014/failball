@@ -180,6 +180,10 @@ model LeagueSettings {
   playoffTeams       Int @default(6)
   playoffStartWeek   Int @default(15)
   tradeDeadlineWeek  Int @default(11)
+  playoffByeTeams    Int @default(0)
+  playoffReseed      Boolean @default(true)
+  consolationBracket Boolean @default(true)
+  championshipWeeks  Int @default(1)
 
   // Waiver Configuration
   waiverProcessDay   Int @default(3)
@@ -455,8 +459,10 @@ model Matchup {
   awayTeamId   String
   homeScore    Decimal? @db.Decimal(10, 2)
   awayScore    Decimal? @db.Decimal(10, 2)
-  isPlayoff    Boolean  @default(false)
-  playoffRound PlayoffRound?
+  isPlayoff      Boolean        @default(false)
+  playoffRound   PlayoffRound?
+  playoffLeg     Int            @default(1)
+  playoffBracket MatchupBracket @default(MAIN)
   isComplete   Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -475,6 +481,15 @@ enum PlayoffRound {
   SEMIFINAL
   CHAMPIONSHIP
   THIRD_PLACE
+  CONSOLATION_SEMIFINAL
+  FIFTH_PLACE
+  SEVENTH_PLACE
+  NINTH_PLACE
+}
+
+enum MatchupBracket {
+  MAIN
+  CONSOLATION
 }
 
 // ============================================
@@ -831,6 +846,9 @@ enum PlayoffResult {
   THIRD_PLACE
   SEMIFINAL
   QUARTERFINAL
+  FIFTH_PLACE
+  SEVENTH_PLACE
+  NINTH_PLACE
   MISSED_PLAYOFFS
 }
 
