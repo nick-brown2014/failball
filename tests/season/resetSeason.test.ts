@@ -7,7 +7,12 @@ import type {
 
 const prismaMock = {
   league: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
-  matchup: { findMany: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn() },
+  matchup: {
+    findMany: vi.fn(),
+    findFirst: vi.fn(),
+    count: vi.fn(async () => 0),
+    deleteMany: vi.fn(),
+  },
   game: { findFirst: vi.fn() },
   $transaction: vi.fn(),
 };
@@ -43,7 +48,9 @@ const game = (options: {
   winnerId: string;
 }): PlayoffBracketGame => ({
   id: `${options.round}-${options.home}-${options.away}`,
+  legIds: [`${options.round}-${options.home}-${options.away}`],
   week: options.week,
+  weeks: [options.week],
   playoffRound: options.round,
   homeTeam: teamRef(options.home, 1),
   awayTeam: teamRef(options.away, 2),
@@ -79,11 +86,19 @@ const completeBracket = (): PlayoffBracket => {
   ];
   return {
     rounds: [
-      { week: 15, playoffRound: PlayoffRound.SEMIFINAL, games: games.slice(0, 2) },
-      { week: 16, playoffRound: PlayoffRound.CHAMPIONSHIP, games: games.slice(2) },
+      { bracket: "MAIN", week: 15, weeks: [15], playoffRound: PlayoffRound.SEMIFINAL, games: games.slice(0, 2) },
+      { bracket: "MAIN", week: 16, weeks: [16], playoffRound: PlayoffRound.CHAMPIONSHIP, games: games.slice(2) },
     ],
     champion: teamRef("t1", 1),
     thirdPlaceWinner: null,
+    consolationWinner: null,
+    config: {
+      playoffTeams: 4,
+      byes: 0,
+      reseed: true,
+      championshipWeeks: 1,
+      consolation: false,
+    },
   };
 };
 
@@ -269,6 +284,18 @@ describe("isSeasonRolloverDue", () => {
 
   it("is not due when the season has no completed championship game", async () => {
     prismaMock.matchup.findFirst.mockResolvedValue(null);
+
+    await expect(
+      isSeasonRolloverDue({
+        leagueId,
+        leagueSeason: 2025,
+        now: new Date(championshipAt.getTime() + 200 * day),
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("is not due while a later championship leg is still incomplete", async () => {
+    prismaMock.matchup.count.mockResolvedValueOnce(1);
 
     await expect(
       isSeasonRolloverDue({

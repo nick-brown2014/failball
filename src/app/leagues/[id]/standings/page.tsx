@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
+import type { PlayoffBracket } from "@/lib/schedule/playoffs";
+import PlayoffBracketView, {
+  type PlayoffFormatSettings,
+} from "@/components/league/PlayoffBracketView";
 
 interface StandingsRow {
   teamId: string;
@@ -19,6 +23,7 @@ interface StandingsRow {
 
 interface ScheduleData {
   season: number;
+  playoffTeams?: number;
   standings: StandingsRow[];
 }
 
@@ -30,6 +35,8 @@ export default function StandingsPage() {
   const params = useParams<{ id: string }>();
   const { status } = useSession();
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
+  const [playoffBracket, setPlayoffBracket] = useState<PlayoffBracket | null>(null);
+  const [playoffSettings, setPlayoffSettings] = useState<PlayoffFormatSettings | null>(null);
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -55,6 +62,15 @@ export default function StandingsPage() {
 
       setSchedule(schedulePayload);
       setUserId((leaguePayload as LeagueData).userId);
+
+      fetch(`/api/leagues/${params.id}/playoffs`, { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const data = await response.json();
+          setPlayoffBracket(data.bracket ?? null);
+          setPlayoffSettings(data.settings ?? null);
+        })
+        .catch(() => {});
       setError("");
       setLoadErrorCode("");
     } catch (err) {
@@ -137,10 +153,11 @@ export default function StandingsPage() {
             <tbody>
               {schedule.standings.map((team) => {
                 const isViewer = team.user.id === userId;
+                const playoffCutLine = team.rank === (schedule.playoffTeams ?? 6);
                 return (
                   <tr
                     key={team.teamId}
-                    className={`border-b dark:border-gray-700 ${isViewer ? "bg-orange-50 dark:bg-orange-900/20" : ""}`}
+                    className={`border-b dark:border-gray-700 ${isViewer ? "bg-orange-50 dark:bg-orange-900/20" : ""} ${playoffCutLine ? "border-b-2 border-orange-400 dark:border-orange-600" : ""}`}
                   >
                     <td className="px-2 py-3 font-medium">{team.rank}</td>
                     <td className="px-2 py-3 font-medium">
@@ -166,6 +183,17 @@ export default function StandingsPage() {
             </tbody>
           </table>
         </div>
+
+        {playoffBracket && (
+          <section className="mt-6 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+            <h2 className="mb-4 text-xl font-semibold">Playoffs</h2>
+            <PlayoffBracketView
+              leagueId={params.id}
+              bracket={playoffBracket}
+              settings={playoffSettings}
+            />
+          </section>
+        )}
       </main>
     </div>
   );

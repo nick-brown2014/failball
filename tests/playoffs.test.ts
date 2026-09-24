@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  bracketSeedOrder,
   derivePlayoffSeeds,
   getPlayoffPlan,
   getPlayoffRoundPlan,
+  pairNextRound,
   PlayoffError,
+  playoffByes,
+  type PlayoffConfig,
+  playoffTotalWeeks,
   reseedPlayoffPairings,
   resolvePlayoffWinner,
+  resolveSeriesWinner,
   seedMap,
 } from "@/lib/schedule/playoffs";
 import type { StandingsMatchup, StandingsTeam } from "@/lib/schedule/standings";
@@ -20,6 +26,16 @@ const teams = (count: number): StandingsTeam[] =>
     pointsFor: (count - index) * 10,
     pointsAgainst: 0,
   }));
+
+const config = (overrides: Partial<PlayoffConfig> = {}): PlayoffConfig => ({
+  playoffTeams: 6,
+  playoffStartWeek: 15,
+  reseed: true,
+  championshipWeeks: 1,
+  consolation: false,
+  teamCount: 10,
+  ...overrides,
+});
 
 const completeMatchup = (
   homeTeamId: string,
@@ -41,16 +57,16 @@ describe("playoff bracket rules", () => {
     [6, ["WILDCARD", "WILDCARD"], [15, 15]],
     [8, ["WILDCARD", "WILDCARD", "WILDCARD", "WILDCARD"], [15, 15, 15, 15]],
   ])("creates the first round for %i teams", (playoffTeams, rounds, weeks) => {
-    const plan = getPlayoffRoundPlan({ playoffTeams, playoffStartWeek: 15 });
+    const plan = getPlayoffRoundPlan(config({ playoffTeams }));
     expect(plan.map((pairing) => pairing.playoffRound)).toEqual(rounds);
     expect(plan.map((pairing) => pairing.week)).toEqual(weeks);
   });
 
   it("rejects unsupported playoff sizes", () => {
-    expect(() => getPlayoffRoundPlan({ playoffTeams: 10, playoffStartWeek: 15 }))
+    expect(() => getPlayoffRoundPlan(config({ playoffTeams: 9 })))
       .toThrowError(PlayoffError);
-    expect(() => getPlayoffRoundPlan({ playoffTeams: 10, playoffStartWeek: 15 }))
-      .toThrow(/2, 4, 6, or 8/);
+    expect(() => getPlayoffRoundPlan(config({ playoffTeams: 1 })))
+      .toThrow(/2 to 8/);
   });
 
   it.each([
@@ -76,11 +92,136 @@ describe("playoff bracket rules", () => {
     ]],
   ])("plans every round and week for %i teams", (playoffTeams, expected) => {
     expect(
-      getPlayoffPlan({ playoffTeams, playoffStartWeek: 15 }).map(({ playoffRound, week }) => [
+      getPlayoffPlan(config({ playoffTeams })).map(({ playoffRound, week }) => [
         playoffRound,
         week,
       ]),
     ).toEqual(expected);
+  });
+
+  it.each([
+    [2, 0],
+    [3, 1],
+    [4, 0],
+    [5, 3],
+    [6, 2],
+    [7, 1],
+    [8, 0],
+  ])("grants %i playoff teams %i byes", (playoffTeams, byes) => {
+    expect(playoffByes(playoffTeams)).toBe(byes);
+  });
+
+  it("orders the eight-team bracket by standard seed slots", () => {
+    expect(bracketSeedOrder(8)).toEqual([1, 8, 4, 5, 3, 6, 2, 7]);
+  });
+
+  it("pairs a five-team field with a single 4v5 wildcard game", () => {
+    const plan = getPlayoffRoundPlan(config({ playoffTeams: 5 }));
+    expect(plan.map(({ homeSeed, awaySeed }) => [homeSeed, awaySeed])).toEqual([
+      [4, 5],
+    ]);
+    expect(plan[0].playoffRound).toBe("WILDCARD");
+  });
+
+  it("pairs a seven-team field with three wildcard games", () => {
+    const plan = getPlayoffRoundPlan(config({ playoffTeams: 7 }));
+    expect(plan.map(({ homeSeed, awaySeed }) => [homeSeed, awaySeed])).toEqual([
+      [2, 7],
+      [3, 6],
+      [4, 5],
+    ]);
+  });
+
+  it("pairs the next round by reseeding or fixed-bracket slot order", () => {
+    const seeds = seedMap(
+      Array.from({ length: 8 }, (_, index) => ({
+        teamId: `t${index + 1}`,
+        seed: index + 1,
+      })),
+    );
+    // Six-team bracket survivors: 1, 2 (byes), 6 (over 3), 4 (over 5).
+    const survivors = ["t6", "t4", "t1", "t2"];
+    const reseeded = pairNextRound({
+      teamIds: survivors,
+      seeds,
+      reseed: true,
+      bracketSize: 8,
+      playoffRound: "SEMIFINAL",
+      weeks: [16],
+    });
+    expect(reseeded.map(({ homeSeed, awaySeed }) => [homeSeed, awaySeed])).toEqual([
+      [1, 6],
+      [2, 4],
+    ]);
+
+    const fixed = pairNextRound({
+      teamIds: survivors,
+      seeds,
+      reseed: false,
+      bracketSize: 8,
+      playoffRound: "SEMIFINAL",
+      weeks: [16],
+    });
+    expect(fixed.map(({ homeSeed, awaySeed }) => [homeSeed, awaySeed])).toEqual([
+      [1, 4],
+      [2, 6],
+    ]);
+  });
+
+  it("plays the championship over two weeks when configured", () => {
+    const plan = getPlayoffPlan(config({ championshipWeeks: 2 }));
+    const championship = plan.find((entry) => entry.playoffRound === "CHAMPIONSHIP")!;
+    const thirdPlace = plan.find((entry) => entry.playoffRound === "THIRD_PLACE")!;
+    expect(championship.weeks).toEqual([17, 18]);
+    expect(thirdPlace.weeks).toEqual([17, 18]);
+    expect(playoffTotalWeeks(config({ championshipWeeks: 2 }))).toBe(4);
+  });
+
+  it("resolves a series by aggregate score across legs", () => {
+    const seeds = seedMap([
+      { teamId: "home", seed: 2 },
+      { teamId: "away", seed: 1 },
+    ]);
+    const legs = [
+      { homeTeamId: "home", awayTeamId: "away", homeScore: 10, awayScore: 12, isComplete: true },
+      { homeTeamId: "home", awayTeamId: "away", homeScore: 15, awayScore: 10, isComplete: true },
+    ];
+    expect(resolveSeriesWinner(legs, seeds)).toBe("home");
+    expect(
+      resolveSeriesWinner(
+        [legs[0], { ...legs[1], isComplete: false }],
+        seeds,
+      ),
+    ).toBeNull();
+    expect(
+      resolveSeriesWinner(
+        [
+          { homeTeamId: "home", awayTeamId: "away", homeScore: 10, awayScore: 10, isComplete: true },
+          { homeTeamId: "home", awayTeamId: "away", homeScore: 12, awayScore: 12, isComplete: true },
+        ],
+        seeds,
+      ),
+    ).toBe("away");
+  });
+
+  it("adds consolation rounds for the best non-playoff teams", () => {
+    const plan = getPlayoffPlan(config({ consolation: true }));
+    const consolation = plan.filter((entry) => entry.bracket === "CONSOLATION");
+    // 10 teams, 6 playoff -> consolation field of 4 -> two rounds.
+    expect(consolation.map((entry) => entry.week)).toEqual([15, 16]);
+    expect(consolation.every((entry) => entry.playoffRound === "CONSOLATION")).toBe(true);
+
+    const pairings = getPlayoffRoundPlan(config({ consolation: true }));
+    const consolationPairings = pairings.filter((pairing) => pairing.bracket === "CONSOLATION");
+    expect(consolationPairings.map(({ homeSeed, awaySeed }) => [homeSeed, awaySeed])).toEqual([
+      [7, 10],
+      [8, 9],
+    ]);
+  });
+
+  it("skips the consolation bracket when fewer than two teams qualify", () => {
+    const plan = getPlayoffPlan(config({ consolation: true, teamCount: 7 }));
+    expect(plan.some((entry) => entry.bracket === "CONSOLATION")).toBe(false);
   });
 
   it("derives seeds from sorted regular-season standings", () => {

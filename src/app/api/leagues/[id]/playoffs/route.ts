@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import {
   generatePlayoffBracket,
   getPlayoffBracket,
+  playoffByes,
   PlayoffError,
 } from "@/lib/schedule/playoffs";
 
@@ -40,7 +41,16 @@ export async function GET(
       select: {
         id: true,
         season: true,
-        settings: { select: { playoffTeams: true, playoffStartWeek: true } },
+        settings: {
+          select: {
+            regularSeasonWeeks: true,
+            playoffTeams: true,
+            playoffStartWeek: true,
+            playoffReseed: true,
+            playoffConsolation: true,
+            championshipWeeks: true,
+          },
+        },
       },
     });
     if (!league) {
@@ -58,12 +68,24 @@ export async function GET(
       );
     }
 
+    const playoffTeams = league.settings?.playoffTeams ?? 6;
+    const playoffStartWeek =
+      league.settings?.playoffStartWeek ??
+      (league.settings?.regularSeasonWeeks ?? 14) + 1;
     const bracket = await getPlayoffBracket({ leagueId: id, season: league.season });
     return NextResponse.json({
       bracket,
-      playoffTeams: league.settings?.playoffTeams ?? 6,
-      playoffStartWeek: league.settings?.playoffStartWeek ?? 15,
+      playoffTeams,
+      playoffStartWeek,
       role: membership.role,
+      settings: {
+        playoffTeams,
+        playoffStartWeek,
+        playoffReseed: league.settings?.playoffReseed ?? true,
+        playoffConsolation: league.settings?.playoffConsolation ?? false,
+        championshipWeeks: league.settings?.championshipWeeks ?? 1,
+        byes: playoffByes(playoffTeams),
+      },
     });
   } catch (error) {
     if (error instanceof PlayoffError) {

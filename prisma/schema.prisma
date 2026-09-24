@@ -179,6 +179,9 @@ model LeagueSettings {
   regularSeasonWeeks Int @default(14)
   playoffTeams       Int @default(6)
   playoffStartWeek   Int @default(15)
+  playoffReseed      Boolean @default(true)
+  playoffConsolation Boolean @default(false)
+  championshipWeeks  Int @default(1)
   tradeDeadlineWeek  Int @default(11)
 
   // Waiver Configuration
@@ -475,6 +478,7 @@ enum PlayoffRound {
   SEMIFINAL
   CHAMPIONSHIP
   THIRD_PLACE
+  CONSOLATION
 }
 
 // ============================================

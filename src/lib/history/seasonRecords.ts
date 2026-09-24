@@ -58,6 +58,7 @@ const ROUND_RESULT: Record<PlayoffRound, PlayoffResult> = {
   [PlayoffRound.SEMIFINAL]: PlayoffResult.SEMIFINAL,
   [PlayoffRound.THIRD_PLACE]: PlayoffResult.SEMIFINAL,
   [PlayoffRound.CHAMPIONSHIP]: PlayoffResult.RUNNER_UP,
+  [PlayoffRound.CONSOLATION]: PlayoffResult.MISSED_PLAYOFFS,
 };
 
 const RESULT_RANK: Record<PlayoffResult, number> = {
@@ -96,6 +97,8 @@ export function derivePlayoffResults(options: {
 
   for (const round of options.bracket.rounds) {
     for (const game of round.games) {
+      // Consolation games never affect a team's playoff finish.
+      if (game.playoffRound === PlayoffRound.CONSOLATION) continue;
       // Every participant is at least credited with reaching this round.
       promote(game.homeTeam.id, ROUND_RESULT[game.playoffRound]);
       promote(game.awayTeam.id, ROUND_RESULT[game.playoffRound]);
