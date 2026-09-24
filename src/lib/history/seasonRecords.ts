@@ -31,7 +31,9 @@ export function checkPlayoffsComplete(bracket: PlayoffBracket | null): PlayoffCo
     };
   }
 
-  const games = bracket.rounds.flatMap((round) => round.games);
+  const games = [...bracket.rounds, ...bracket.consolationRounds].flatMap(
+    (round) => round.games,
+  );
   const championship = games.find(
     (game) => game.playoffRound === PlayoffRound.CHAMPIONSHIP,
   );
@@ -101,7 +103,7 @@ export function derivePlayoffResults(options: {
     if (RESULT_RANK[result] > RESULT_RANK[current]) results.set(teamId, result);
   };
 
-  for (const round of options.bracket.rounds) {
+  for (const round of [...options.bracket.rounds, ...options.bracket.consolationRounds]) {
     for (const game of round.games) {
       // Every participant is at least credited with reaching this round.
       promote(game.homeTeam.id, ROUND_RESULT[game.playoffRound]);

@@ -28,12 +28,14 @@ const game = (options: {
   id: `${options.round}-${options.home}-${options.away}`,
   week: options.week,
   playoffRound: options.round,
+  playoffBracket: "MAIN",
   homeTeam: teamRef(options.home, 1),
   awayTeam: teamRef(options.away, 2),
   homeScore: options.homeScore ?? null,
   awayScore: options.awayScore ?? null,
   isComplete: options.isComplete ?? true,
   winnerId: options.winnerId ?? null,
+  legs: [],
 });
 
 const bracket = (games: PlayoffBracketGame[], champion: string | null): PlayoffBracket => {
@@ -44,10 +46,11 @@ const bracket = (games: PlayoffBracketGame[], champion: string | null): PlayoffB
         candidate.playoffRound === entry.playoffRound && candidate.week === entry.week,
     );
     if (round) round.games.push(entry);
-    else rounds.push({ week: entry.week, playoffRound: entry.playoffRound, games: [entry] });
+    else rounds.push({ week: entry.week, playoffRound: entry.playoffRound, playoffBracket: "MAIN", games: [entry] });
   }
   return {
     rounds,
+    consolationRounds: [],
     champion: champion ? teamRef(champion, 1) : null,
     thirdPlaceWinner: null,
   };

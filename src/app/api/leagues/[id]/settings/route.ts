@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import {
+  assertSupportedPlayoffConfig,
+  getPlayoffPlan,
+  PlayoffError,
+} from "@/lib/schedule/playoffs";
 
 interface ValidationError {
   field: string;
@@ -23,6 +28,8 @@ const integerFields = [
   "playoffTeams",
   "playoffStartWeek",
   "tradeDeadlineWeek",
+  "playoffByeTeams",
+  "championshipWeeks",
   "waiverProcessDay",
 ] as const;
 
@@ -44,8 +51,12 @@ const integerRanges: Record<
   playoffTeams: { min: 2, max: 20 },
   playoffStartWeek: { min: 1, max: 40 },
   tradeDeadlineWeek: { min: 0, max: 40 },
+  playoffByeTeams: { min: 0, max: 16 },
+  championshipWeeks: { min: 1, max: 2 },
   waiverProcessDay: { min: 0, max: 6 },
 };
+
+const booleanFields = ["playoffReseed", "consolationBracket"] as const;
 
 const decimalFields = [
   "qbIncompletion",
@@ -102,6 +113,7 @@ const decimalFields = [
 const acceptedFields = new Set<string>([
   ...integerFields,
   ...decimalFields,
+  ...booleanFields,
   "waiverType",
 ]);
 
@@ -130,6 +142,15 @@ function validateSettings(body: Record<string, unknown>) {
       });
     } else {
       data[field] = value;
+    }
+  }
+
+  for (const field of booleanFields) {
+    if (!(field in body)) continue;
+    if (typeof body[field] !== "boolean") {
+      errors.push({ field, message: "Must be a boolean" });
+    } else {
+      data[field] = body[field];
     }
   }
 
@@ -243,6 +264,61 @@ export async function PATCH(
     if (errors.length > 0) {
       return NextResponse.json({ error: "Validation failed", code: "VALIDATION_ERROR", details: errors }, { status: 400 });
     }
+    const playoffFields = [
+      "playoffTeams",
+      "playoffStartWeek",
+      "playoffByeTeams",
+      "playoffReseed",
+      "consolationBracket",
+      "championshipWeeks",
+      "regularSeasonWeeks",
+    ];
+    if (playoffFields.some((field) => field in data)) {
+      const current = await prisma.leagueSettings.findUnique({ where: { leagueId: id } });
+      const merged = { ...current, ...data };
+      const playoffTeams = merged.playoffTeams ?? 6;
+      const playoffByeTeams = merged.playoffByeTeams ?? 0;
+      const playoffStartWeek = merged.playoffStartWeek ?? 15;
+      const championshipWeeks = merged.championshipWeeks ?? 1;
+      const consolationBracket = merged.consolationBracket ?? true;
+      try {
+        assertSupportedPlayoffConfig({ playoffTeams, playoffByeTeams });
+      } catch (error) {
+        if (error instanceof PlayoffError) {
+          return NextResponse.json(
+            { error: error.message, code: "VALIDATION_ERROR", details: [{ field: "playoffByeTeams", message: error.message }] },
+            { status: 400 },
+          );
+        }
+        throw error;
+      }
+      const plan = getPlayoffPlan({
+        playoffTeams,
+        playoffStartWeek,
+        playoffByeTeams,
+        consolationBracket,
+        championshipWeeks,
+      });
+      const lastWeek = Math.max(
+        ...plan.map((round) => round.week + round.weekSpan - 1),
+      );
+      if (lastWeek > 40) {
+        return NextResponse.json(
+          {
+            error: `The playoff schedule would end in week ${lastWeek}, past the maximum week 40`,
+            code: "VALIDATION_ERROR",
+            details: [
+              {
+                field: "playoffStartWeek",
+                message: `Playoffs would end in week ${lastWeek}, past the maximum week 40`,
+              },
+            ],
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const settings = await prisma.leagueSettings.update({ where: { leagueId: id }, data });
     return NextResponse.json({ settings });
   } catch (error) {

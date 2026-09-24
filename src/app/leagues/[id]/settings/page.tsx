@@ -32,6 +32,10 @@ const groups = [
       "playoffTeams",
       "playoffStartWeek",
       "tradeDeadlineWeek",
+      "playoffByeTeams",
+      "playoffReseed",
+      "consolationBracket",
+      "championshipWeeks",
     ],
   },
   {
@@ -129,8 +133,19 @@ const integerFields = new Set([
   "playoffTeams",
   "playoffStartWeek",
   "tradeDeadlineWeek",
+  "playoffByeTeams",
+  "championshipWeeks",
   "waiverProcessDay",
 ]);
+
+const booleanFields = new Set(["playoffReseed", "consolationBracket"]);
+
+const fieldHelp: Record<string, string> = {
+  playoffByeTeams: "Top seeds that skip the first playoff round (0 = automatic)",
+  playoffReseed: "Re-seed survivors each round; off = fixed bracket",
+  consolationBracket: "Play consolation games for final places (incl. third place)",
+  championshipWeeks: "1 = single-week final, 2 = two-week cumulative final",
+};
 
 const labels: Record<string, string> = {};
 for (const group of groups) {
@@ -167,7 +182,9 @@ export default function LeagueSettingsPage() {
             values[field] =
               field === "waiverType"
                 ? value
-                : String(parseFloat(String(value)));
+                : booleanFields.has(field)
+                  ? String(Boolean(value))
+                  : String(parseFloat(String(value)));
           }
         }
         setSettings(values);
@@ -190,7 +207,12 @@ export default function LeagueSettingsPage() {
 
     const emptyFields = groups
       .flatMap((group) => group.fields)
-      .filter((field) => field !== "waiverType" && !settings[field]?.trim());
+      .filter(
+        (field) =>
+          field !== "waiverType" &&
+          !booleanFields.has(field) &&
+          !settings[field]?.trim(),
+      );
 
     if (emptyFields.length > 0) {
       const emptyErrors: Record<string, string> = {};
@@ -203,13 +225,15 @@ export default function LeagueSettingsPage() {
       return;
     }
 
-    const body: Record<string, string | number> = {};
+    const body: Record<string, string | number | boolean> = {};
     for (const group of groups) {
       for (const field of group.fields) {
         body[field] =
           field === "waiverType"
             ? settings[field]
-            : Number(settings[field]);
+            : booleanFields.has(field)
+              ? settings[field] === "true"
+              : Number(settings[field]);
       }
     }
 
@@ -327,6 +351,28 @@ export default function LeagueSettingsPage() {
                         <option value="FAAB">FAAB</option>
                         <option value="RESET_WEEKLY">Reset Weekly</option>
                       </select>
+                    ) : field === "championshipWeeks" ? (
+                      <select
+                        value={settings[field] || "1"}
+                        disabled={role !== "COMMISSIONER"}
+                        onChange={(event) =>
+                          updateField(field, event.target.value)
+                        }
+                        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
+                      >
+                        <option value="1">1 week</option>
+                        <option value="2">2 weeks (cumulative)</option>
+                      </select>
+                    ) : booleanFields.has(field) ? (
+                      <input
+                        type="checkbox"
+                        checked={settings[field] === "true"}
+                        disabled={role !== "COMMISSIONER"}
+                        onChange={(event) =>
+                          updateField(field, String(event.target.checked))
+                        }
+                        className="mt-2 block h-4 w-4"
+                      />
                     ) : (
                       <input
                         type="number"
@@ -338,6 +384,11 @@ export default function LeagueSettingsPage() {
                         }
                         className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
                       />
+                    )}
+                    {fieldHelp[field] && (
+                      <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                        {fieldHelp[field]}
+                      </span>
                     )}
                     {fieldErrors[field] && (
                       <span className="text-sm text-red-600">

@@ -40,7 +40,16 @@ export async function GET(
       select: {
         id: true,
         season: true,
-        settings: { select: { playoffTeams: true, playoffStartWeek: true } },
+        settings: {
+          select: {
+            playoffTeams: true,
+            playoffStartWeek: true,
+            playoffByeTeams: true,
+            playoffReseed: true,
+            consolationBracket: true,
+            championshipWeeks: true,
+          },
+        },
       },
     });
     if (!league) {
@@ -63,6 +72,12 @@ export async function GET(
       bracket,
       playoffTeams: league.settings?.playoffTeams ?? 6,
       playoffStartWeek: league.settings?.playoffStartWeek ?? 15,
+      config: {
+        playoffByeTeams: league.settings?.playoffByeTeams ?? 0,
+        playoffReseed: league.settings?.playoffReseed ?? true,
+        consolationBracket: league.settings?.consolationBracket ?? true,
+        championshipWeeks: league.settings?.championshipWeeks ?? 1,
+      },
       role: membership.role,
     });
   } catch (error) {
