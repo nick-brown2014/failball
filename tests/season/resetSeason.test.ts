@@ -7,7 +7,12 @@ import type {
 
 const prismaMock = {
   league: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
-  matchup: { findMany: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn() },
+  matchup: {
+    findMany: vi.fn(),
+    findFirst: vi.fn(),
+    count: vi.fn(async () => 0),
+    deleteMany: vi.fn(),
+  },
   game: { findFirst: vi.fn() },
   $transaction: vi.fn(),
 };
@@ -279,6 +284,18 @@ describe("isSeasonRolloverDue", () => {
 
   it("is not due when the season has no completed championship game", async () => {
     prismaMock.matchup.findFirst.mockResolvedValue(null);
+
+    await expect(
+      isSeasonRolloverDue({
+        leagueId,
+        leagueSeason: 2025,
+        now: new Date(championshipAt.getTime() + 200 * day),
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("is not due while a later championship leg is still incomplete", async () => {
+    prismaMock.matchup.count.mockResolvedValueOnce(1);
 
     await expect(
       isSeasonRolloverDue({
