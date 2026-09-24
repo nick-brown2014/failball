@@ -129,7 +129,9 @@ export default function PlayoffBracketView({
                           ? game.weeks.length > 1
                             ? "Final (aggregate)"
                             : "Final"
-                          : "Not played"}
+                          : game.homeScore != null || game.awayScore != null
+                            ? "In progress"
+                            : "Not played"}
                       </p>
                     </Link>
                   );

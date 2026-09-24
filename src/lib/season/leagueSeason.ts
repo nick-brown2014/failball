@@ -5,17 +5,16 @@ export async function getFinalPlayoffGameAt(
   leagueId: string,
   season: number,
 ): Promise<Date | null> {
-  const matchup = await prisma.matchup.findFirst({
-    where: {
-      leagueId,
-      season,
-      playoffRound: PlayoffRound.CHAMPIONSHIP,
-      isComplete: true,
-    },
-    orderBy: { week: "desc" },
-  });
+  const where = { leagueId, season, playoffRound: PlayoffRound.CHAMPIONSHIP };
+  const [matchup, incomplete] = await Promise.all([
+    prisma.matchup.findFirst({
+      where: { ...where, isComplete: true },
+      orderBy: { week: "desc" },
+    }),
+    prisma.matchup.count({ where: { ...where, isComplete: false } }),
+  ]);
 
-  if (!matchup) {
+  if (!matchup || incomplete > 0) {
     return null;
   }
 
